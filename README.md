@@ -1,8 +1,9 @@
-# proxmox-guacamole-client
+# prox-guac-client
+
 Custom integration of Proxmox and Guacamole in PHP for deploying and using virtual machines in one web client application.
 Automated using only Open Source software, mainly MariaDB and Ansible.
 
-Coded by Oscar Boronat for it use in the final project of my studies in the Certificate of Higher Education of Computer Network Systems Management.
+Originally coded by [Oscar Boronat](https://github.com/osc3b/proxmox-guacamole-client) for it use in the final project of my studies in the Certificate of Higher Education of Computer Network Systems Management.
 
 Open Source software used in the project:
 
