@@ -1,0 +1,39 @@
+.vertical-center {
+  margin: 0;
+  position: absolute;
+  top: 50%;
+  -ms-transform: translateY(-50%);
+  transform: translateY(-50%);
+}
+
+.vmstatus{
+  font-weight: bold;
+  color: red;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.connect{
+  width: 70px;
+}
+
+.timer{
+  text-align: right;
+}
+
+.timer img{
+  display: block;
+  margin-bottom: 4px;
+  margin-left: 5px;
+}
+
+#w10{
+  background: url(./img/loading.gif) left center no-repeat; 
+}
+
+#u20{
+  background: url(./img/loading.gif) left center no-repeat; 
+}
+
+#d10{
+  background: url(./img/loading.gif) left center no-repeat; 
+}
