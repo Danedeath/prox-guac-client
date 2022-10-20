@@ -1,5 +1,9 @@
 # prox-guac-client
 
+Original: 
+
+- https://github.com/osc3b/proxmox-guacamole-client
+
 Custom integration of Proxmox and Guacamole in PHP for deploying and using virtual machines in one web client application.
 Automated using only Open Source software, mainly MariaDB and Ansible.
 
