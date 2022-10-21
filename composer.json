@@ -1,0 +1,7 @@
+{
+    "require": {
+        "saleh7/proxmox-ve_php_api": "^1.0",
+        "ridvanaltun/guacamole": "^1.0",
+        "duosecurity/duo_universal_php": "^1.0"
+    }
+}

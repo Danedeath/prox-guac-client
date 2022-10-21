@@ -45,7 +45,6 @@
         'prox_key_id'   => '',                                           // proxmox API key ID
         'prox_user'     => '',                                           // proxmox user
         'prox_pass'     => '',                                           // proxmox password, not required if using an API key
-
         'default_store' => '',                                           // default storage location for new VMs created using the dashboard
 
         // duo authencation settings
