@@ -60,6 +60,7 @@ Open Source software used in the project:
 - Add an administration backend
 - Add profile page
 - Add settings page
+- Add notifications on download/upload in guacd console
 
 # Images
 
