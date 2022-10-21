@@ -48,6 +48,8 @@ Open Source software used in the project:
    - Currently required: 
      - guacamole database connection
      - guacamole connection 
+     - proxmox configuration settings
+     - duo configuration
      
 # Todo
 
@@ -61,6 +63,8 @@ Open Source software used in the project:
 - Add profile page
 - Add settings page
 - Add notifications on download/upload in guacd console
+- Add ability to disable DUO
+- Add TOTP option
 
 # Images
 
