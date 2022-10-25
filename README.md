@@ -53,18 +53,22 @@ Open Source software used in the project:
      
 # Todo
 
-- Finish building SQL database to remove the usage of Guacamole DB/Auth
-- Add password reset (for VM) and automatically poll user accounts 
-- Add permission system for users
-- Add a method to securely store VM connection information (to reduce the polls to Proxmox)
+- Transition from Guacamole Auth to custom Auth
 - Implement more statistics for VMs
 - Possibly replace display of VMs from a table to cards
+- Add password reset (for VM) and automatically poll user accounts 
 - Add an administration backend
 - Add profile page
 - Add settings page
 - Add notifications on download/upload in guacd console
 - Add ability to disable DUO
 - Add TOTP option
+- SQL Items: 
+  - Securely store VM connection information
+  - Add permission system 
+  - Add session storage
+  - Add account reset systems
+- Add account throttling
 
 # Images
 

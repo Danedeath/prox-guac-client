@@ -184,6 +184,16 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
                 ) - 10;
             }
 
+            function saveAs(blob_data, download_file_name) {
+                var a = document.createElement('a');
+                var url = window.URL.createObjectURL(blob_data);
+                var filename = download_file_name;
+                a.href = url;
+                a.download = filename;
+                a.click();
+                window.URL.revokeObjectURL(url);
+            }
+
             // Instantiate client, using an HTTP tunnel for communications.
             //http://guacamole.apache.org/doc/guacamole-common-js/Guacamole.WebSocketTunnel.html
             var ws_scheme = window.location.protocol == "https:" ? "wss" : "ws";
@@ -228,6 +238,23 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
                 fileSystem = object;
             };
 
+            guac.onfile = function(stream, mimetype, filename){
+                stream.sendAck('OK', Guacamole.Status.Code.SUCCESS);  // 告知收到流
+                reader = new Guacamole.BlobReader(stream, mimetype);
+                swal({ 
+                    title: "Downloading '" + filename + "'...",
+                    type: 'info',
+                    position: 'top',
+                    toast: true,
+                    showConfirmButton: false
+                });
+                reader.onend = function() {
+                    var blob_data = reader.getBlob(); 
+                    swal.close(); 
+                    saveAs(blob_data, filename); 
+                };
+            }
+
             // Drag and upload the file to the RDP server \\tsclient\mapped disk\
             document.ondragover = function(event){
                 // Drag and drop files to the window to block, so that the browser does not prompt to open/download
@@ -241,12 +268,24 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
                         if (ev.dataTransfer.items[i].kind === 'file') {
                             var file = ev.dataTransfer.items[i].getAsFile();
                             var reader = new FileReader();
+                            swal({ 
+                                title: "uploading '" + file.name + "' to the VM",
+                                type: 'info',
+                                position: 'top',
+                                toast: true,
+                                showConfirmButton: false
+                            });
                             reader.onloadend = function fileContentsLoaded (e){
                                 const stream = guac.createFileStream(file.type, file.name);
                                 var bufferWriter = new Guacamole.ArrayBufferWriter(stream);
                                 bufferWriter.sendData(reader.result);
+                                bufferWriter.oncomplete = function() {
+                                    swal.close();
+                                };
                                 bufferWriter.sendEnd();
                             };
+                            
+
                             reader.readAsArrayBuffer(file);
                         }
                     }
