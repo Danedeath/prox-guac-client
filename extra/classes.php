@@ -68,7 +68,7 @@
             $pass = filter_var($pass, FILTER_SANITIZE_STRING);
 
             // encrypt the combined password!
-            $pass = password_hash($pass . $this->$pepper, PASSWORD_BCRYPT);
+            $pass = password_hash($pass . $this->$pepper, PASSWORD_DEFAULT);
 
             if ($pass === false) { 
                 return array(
@@ -78,7 +78,6 @@
             } else { 
                 return $pass;
             }
-
         }
 
         /* 
@@ -107,7 +106,7 @@
         * @param $pass - the password of the user
         * @return boolean - true if the login is successful, false if not
         */
-        public function checkLogin($user, $pass) { 
+        public function login($user, $pass) { 
 
             $user = filter_var($user, FILTER_SANITIZE_STRING);
             $pass = filter_var($pass, FILTER_SANITIZE_STRING);
@@ -116,10 +115,40 @@
 
             // verify the password is correct!
             if (password_verify($pass, $user_info['password'])) { 
+
+                // check if the password needs to be reshashed!
+                if (password_needs_rehash($user_info['password'], PASSWORD_DEFAULT)) {
+
+                    $new_hash = $this->hashPass($pass);
+
+                    $this->updatePassword($user, $new_hash);
+                }
+
                 $this->updateLastLogin($user);
                 return true;
-            } else { 
-                return false;
+
+            } else { return false; }
+        }
+
+        /* 
+        * updatePassword will update the password of the user
+        * @param $user - the username of the user
+        * @param $pass - the new password of the user
+        */
+        public function updatePassword($user, $pass) { 
+
+            // update the password in the database!
+            $query = 'update users set password = :pass where username = :user';
+            $query_params = array(
+                ':pass' => $pass,
+                ':user' => $user
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                die("Failed to run query: " . $ex->getMessage());
             }
         }
 
@@ -151,6 +180,7 @@
             } else { 
                 if (is_array($data['password'])) { 
                     return $data['password'];
+                    
                 } else { 
     
                     $query = "insert into users (username, password, emial) values (:user, :pass, :email)";
@@ -175,9 +205,367 @@
                         'message' => 'User registered successfully!'
                     );
                 }
+            }           
+        }
+
+        /*
+        * resetUser will reset the password of the user, provided the token is valid
+        * @param $data - an array containing the user information
+        *   - $data['token']    - the token to reset the password
+        *   - $data['password'] - the new password
+        *   - $data['user']     - the username of the user
+        * @return array - the status of the reset
+        */
+        public function resetUser($data) { 
+
+            $data['user']  = filter_var($data['user'], FILTER_SANITIZE_STRING);
+            $data['email'] = filter_var($data['email'], FILTER_VALIDATE_EMAIL);
+            $data['token'] = filter_var($data['token'], FILTER_SANITIZE_STRING);
+            
+            if ($data['email'] === false) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Invalid email address!'
+                );
             }
 
+            // check if the token is valid!
+            $query = 'select * from reset_tokens where username = :user and reset_token = :token';
+            $query_params = array(
+                ':user' => $data['user'],
+                ':token' => $data['token']
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            $row = $stmt->fetch();
+
+            if ($row) { 
+
+                // check if the token is expired!
+                if ($row['expires'] < time()) { 
+                    return array(
+                        'status' => 'error',
+                        'message' => 'Token has expired!'
+                    );
+
+                } else { 
+
+                    // update the password in the database!
+                    $query = 'update users set password = :pass where username = :user';
+                    $query_params = array(
+                        ':pass' => $this->hashPass($data['password']),
+                        ':user' => $data['user']
+                    );
+
+                    try { 
+                        $stmt = $this->db->prepare($query);
+                        $result = $stmt->execute($query_params);
+
+                    } catch(PDOException $ex) { 
+                        return array(
+                            'status' => 'error',
+                            'message' => 'Failed to run query: ' . $ex->getMessage()
+                        );
+                    }
+
+                    return $this->deleteToken($data);
+                }
+            } else { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Invalid token!'
+                );
+            }
+        }
+
+        /*
+        * deleteToken will remove the token from the database
+        * @param $data - an array containing the user information
+        *   - $data['token'] - the token to reset the password
+        *   - $data['user']  - the username of the user
+        * @return array - the status of the reset
+        */
+        public function deleteToken($data) { 
+
+            // delete the token from the database!
+            $query = 'delete from reset_tokens where username = :user and reset_token = :token';
+            $query_params = array(
+                ':user' => $data['user'],
+                ':token' => $data['token']
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            return array(
+                'status' => 'success',
+                'message' => 'Password reset successfully!'
+            );
+        }
+        
+    }
+
+    class SettingsHandler { 
+
+        protected $db;
+
+        public function __construct($db) { 
+            global $DB;
+
+            if ($db instanceof PDO) { 
+                $this->db = $db;
+            } else { 
+                $this->db = $DB;
+            }
+        }
+
+        public function getSetting($name) { 
+
+            $name = filter_var($name, FILTER_SANITIZE_STRING);
+
+            $query = 'select * from settings where name = :name';
+            $query_params = array(
+                ':name' => $name
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            $row = $stmt->fetch();
+
+            if ($row) { 
+                return $row['value'];
+            } else { 
+                return false;
+            }
+        }
+
+        public function setSetting($name, $value) { 
+
+            $name  = filter_var($name, FILTER_SANITIZE_STRING);
+            $value = filter_var($value, FILTER_SANITIZE_STRING);
+
+            $query = 'update settings set value = :value, where name = :name';
+            $query_params = array(
+                ':name' => $name,
+                ':value' => $value
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            return true;
+        }
+
+    }
+
+    class UserHandler { 
+
+        protected $db; 
+
+        public function __construct($db) { 
+            global $DB;
+
+            if ($db instanceof PDO) { 
+                $this->db = $db;
+            } else { 
+                $this->db = $DB;
+            }
+        }
+
+        /* 
+        * getPerms will collect the permissions of the user
+        * @param $userid - the userid of the user
+        * @return array - the permissions of the user
+        */
+        public function getPerms($userid) { 
+
+            $userid = (int) filter_var($userid, FILTER_SANITIZE_NUMBER_INT);
+
+            $query = 'select * from permissions where userid = :userid';
+            $query_params = array(
+                ':userid' => $userid
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            $row = $stmt->fetch();
+
+            if ($row) { 
+                return $row;
+            } else { 
+                return false;
+            }
+        }
+
+        /*
+        * getPerm will collect the provided permission of the user
+        * @param $userid - the userid of the user
+        * @param $perm - the permission to collect
+        * @return boolean - the permission of the user
+        */
+        public function getPerm($userid, $perm) { 
+
+            $userid = (int) filter_var($userid, FILTER_SANITIZE_NUMBER_INT);
+            $perm = filter_var($perm, FILTER_SANITIZE_STRING);
+            
+            $query = 'select * from permissions where userid = :userid';
+            $query_params = array(
+                ':userid' => $userid,
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            $row = $stmt->fetch();
+
+            if ($row) { 
+                return $row[$perm];
+            } else { 
+                return false;
+            }
+        }
+        
+        /* 
+        * updatePerm will update the provided permission of the user
+        * @param $userid - the userid of the user
+        * @param $perm - the permission to update
+        * @param $value - the value to set the permission to
+        * @return boolean - the status of the update
+        */
+        public function updatePerm($userid, $perm, $value) { 
+
+            $userid = (int) filter_var($userid, FILTER_SANITIZE_NUMBER_INT);
+            $perm = filter_var($perm, FILTER_SANITIZE_STRING);
+            $value = (int) filter_var($value, FILTER_SANITIZE_NUMBER_INT);
+
+            if ($value === 1 || $value === true || $value === 'true') { 
+                $value = 1;
+            } else { 
+                $value = 0;
+            }
+                
+            $query = 'update permissions set ' . $perm . ' = :value where userid = :userid';
+            $query_params = array(
+                ':userid' => $userid,
+                ':value' => $value
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            return true;
+        }
+
+        public function getUserSettings($userid) { 
+
+            $userid = (int) filter_var($userid, FILTER_SANITIZE_NUMBER_INT);
+                
+            $query = 'select * from user_settings where userid = :userid';
+            $query_params = array(
+                ':userid' => $userid
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            $row = $stmt->fetch();
+
+            if ($row) { 
+                return $row;
+            } else { 
+                return false;
+            }
+        }
+
+        public function getUserSetting($userid, $setting) { 
            
+            $userid  = (int) filter_var($userid, FILTER_SANITIZE_NUMBER_INT);
+            $setting = filter_var($setting, FILTER_SANITIZE_STRING);
+
+            $query = 'select * from user_settings where userid = :userid';
+            $query_params = array(
+                ':userid' => $userid,
+                ':setting' => $setting
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            $row = $stmt->fetch();
+
+            if ($row) { 
+                return $row[$setting];
+            } else { 
+                return false;
+            }
+        }
+
+        public function updateUserSetting($userid, $setting, $value) { 
+            
+            $userid  = (int) filter_var($userid, FILTER_SANITIZE_NUMBER_INT);
+            $setting = filter_var($setting, FILTER_SANITIZE_STRING);
+            $value   = filter_var($value, FILTER_SANITIZE_STRING);
+
+            $query = 'update user_settings set ' . $setting . ' = :value where userid = :userid';
+            $query_params = array(
+                ':userid' => $userid,
+                ':value' => $value
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            return true;
         }
     }
 
@@ -880,7 +1268,7 @@
         }
 
         /* 
-            revertSnap will revert a VM to a snapshot
+            revertSnap will revert a VM to the previous snapshot
             @param $vmid: The ID of the VM to revert
             @param $name: The name of the VM to revert
             @param $node: The node to revert the VM in
