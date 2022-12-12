@@ -26,15 +26,14 @@
         protected $db;
         protected $pepper;
 
-        // store the database connector and the pepper as variables in the class!
-        function __construct() {
-            global $DB;
+        function __construct($DB) {
             global $INFO;
 
             $this->db = $DB; 
             $this->pepper = $INFO['pepper'];
 
         }
+
 
         /* 
         * getUser will get the user from the database and return it as an array
@@ -44,7 +43,7 @@
         public function getUser($user) { 
             $user = filter_var($user, FILTER_SANITIZE_STRING);
 
-            $query = 'select * from users where username = :user';
+            $query = 'select * from users where email = :user';
             $query_params = array(
                 ':user' => $user
             );
@@ -56,7 +55,7 @@
                 die("Failed to run query: " . $ex->getMessage());
             }
 
-            $row = $stmt->fetch();
+            return $stmt->fetch();
         }
 
         /* hash the password with the pepper and the salt from the database! 
@@ -68,7 +67,7 @@
             $pass = filter_var($pass, FILTER_SANITIZE_STRING);
 
             // encrypt the combined password!
-            $pass = password_hash($pass . $this->$pepper, PASSWORD_DEFAULT);
+            $pass = password_hash($pass . $this->pepper, PASSWORD_DEFAULT);
 
             if ($pass === false) { 
                 return array(
@@ -160,7 +159,7 @@
         public function registerUser($data) { 
             $data['username'] = filter_var($data['username'], FILTER_SANITIZE_STRING);
             $data['password'] = $this->hashPass($data['password']);
-            $data['email']    = filter_var($data['email'], FILTER_VALIDATE_EMAIL);           
+            $data['email']    = filter_var($data['email'], FILTER_SANITIZE_STRING);           
             
             if ($data['email'] === false) { 
                 return array(
@@ -172,7 +171,8 @@
             // check if the email is already in use!
             $existing = $this->getUser($data['email']);
 
-            if ($existing !== false) { 
+
+            if ($existing) { 
                 return array(
                     'status' => 'error',
                     'message' => 'Email address already in use!'
@@ -183,10 +183,10 @@
                     
                 } else { 
     
-                    $query = "insert into users (username, password, emial) values (:user, :pass, :email)";
+                    $query = "insert into users (username, password, email) values (:user, :pass, :email)";
                     $query_params = array(
                         ':user' => $data['username'],
-                        ':pass' => $this->hashPass($data['password']),
+                        ':pass' => $data['password'],
                         ':email' => $data['email']
                     );
     
@@ -202,7 +202,7 @@
     
                     return array(
                         'status' => 'success',
-                        'message' => 'User registered successfully!'
+                        'message' => 'Successfully registered the user, <strong>'.$data['username'].'</strong>!'
                     );
                 }
             }           
@@ -318,7 +318,7 @@
                 'message' => 'Password reset successfully!'
             );
         }
-        
+                
     }
 
     class SettingsHandler { 
@@ -567,6 +567,112 @@
 
             return true;
         }
+
+        public function getAllUsers() { 
+            $query = 'select id, username, email, reg_date, login_date from users';
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute();
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            return $stmt->fetchAll();
+        }
+
+        public function getUserByID($userid) { 
+            $query = 'select * from users where id = :userid';
+            $query_params = array(
+                ':userid' => $userid
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            return $stmt->fetch();
+        }
+    }
+
+    class connectionManager { 
+
+        protected $db;
+
+        public function __construct($db) { 
+            global $DB;
+
+            if ($db instanceof PDO) { 
+                $this->db = $db;
+            } else { 
+                $this->db = $DB;
+            }
+        }
+
+        // getConnection will collect the connection information for the provided connection ID
+        // @param $id - the connection ID
+        // @return array - the connection information
+        public function getConnection($id) { 
+
+            $id = (int) filter_var($id, FILTER_SANITIZE_NUMBER_INT);
+
+            $query = 'select * from connections where id = :id';
+            $query_params = array(
+                ':id' => $id
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            $row = $stmt->fetch();
+            return $row;
+        }
+
+        // getSharedConnections will collect the connections that have been shared with the userID
+        // @param $userid - the userID to collect the shared connections for
+        // @return array - the shared connections
+        public function getSharedConnections($userID) { 
+
+            $userID = (int) filter_var($userID, FILTER_SANITIZE_NUMBER_INT);
+
+            $query = 'select * from connections where shared_with like concat("%", :userid, "%"';
+            $query_params = array(
+                ':userid' => $userID
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            $rows = $stmt->fetchAll();
+
+            $shared_conns = array();
+            foreach ($rows as $row) { 
+                $sharedIDs = explode(',', $row['shared_with']);
+                if (in_array($userID, $sharedIDs)) { 
+                    push_array($shared_conns, $row);
+
+                }
+            }
+            return $shared_conns;
+        }
+
     }
 
     class GuacLoginHandler {
@@ -593,6 +699,12 @@
             }
 
             return $stmt->fetch()['password_salt'];
+        }
+
+        function registrationStatus() { 
+            global $INFO;
+
+            return boolval($INFO['enable_registration']);
         }
 
         // getEncodedMsg utilizes the MySQL UNHEX function to retrieve the digest for a SHA2 hash from $content with a provided salt
@@ -681,6 +793,27 @@
             $_SESSION = array();
             // Destroy the session.
             session_destroy();
+        }
+
+        function getAllUsers() { 
+            global $DB;
+            global $INFO;
+
+            # "select * from guacamole_user u inner join guacamole_entity e on u.entity_id = e.entity_id where u.name = :username and u.password_hash = UNHEX(SHA2(CONCAT(:password, HEX(u.password_salt)), 256))";
+			# $query = "SELECT * FROM guacamole_user WHERE password_hash = UNHEX(SHA2(CONCAT(:password, HEX(SELECT password_hash from )), 256))  AND entity_id IN (SELECT entity_id FROM guacamole_entity WHERE name = ':username')";
+            $query = "select * from guacamole_user u inner join guacamole_entity e on u.entity_id = e.entity_id";
+            try { 
+                $stmt = $DB->prepare($query);
+                $stmt->execute();
+            } catch (PDOException $ex) {
+                die("Failed to fetch user information, using LoginHandler.getAllUsers()!\n" . $ex->getMessage());
+            }
+
+            $users = array();
+            foreach($stmt->fetchAll() as $row) { 
+                array_push($users, $row);
+            }
+            return $users;
         }
     }
 
@@ -977,6 +1110,39 @@
             return self::$nodesList;
         }
 
+        function getClusterResources() { 
+
+            $cluster_data = self::$cluster::Resources('node')->data;
+
+            $data = array(
+                'cpu' => 0,
+                'cpu_usage' => 0.0,
+                'mem' => 0,
+                'mem_usage' => 0.0,
+                'disk' => 0,
+                'disk_usage' => 0.0,
+            );
+
+            foreach($cluster_data as $cluster) { 
+                $data['cpu'] += $cluster->maxcpu;
+                $data['cpu_usage'] += $cluster->cpu;
+                $data['mem'] += $cluster->maxmem;
+                $data['mem_usage'] += $cluster->mem;
+                $data['disk'] += $cluster->maxdisk;
+                $data['disk_usage'] += $cluster->disk;
+            }
+
+            $data['cpu_usage'] = round(($data['cpu_usage'] * 100) / count($cluster_data), 2);
+            $data['mem_usage'] = round((($data['mem_usage'] / $data['mem']) * 100) / count($cluster_data), 2);
+            $data['disk_usage'] = round((($data['disk_usage'] / $data['disk']) * 100) / count($cluster_data), 2);
+
+            return $data;
+        }
+
+        public function getClusterResc() { 
+            return self::$cluster::Resources('node')->data;    
+        }
+
         function getVMs($node) {
             return self::$nodes::Qemu($node);
         }
@@ -1029,7 +1195,7 @@
         }
 
         function getVMNetworking($node, $vmid) { 
-            $data = self::$nodes::qemuAgentNetwork($node, $vmid);
+            $data = self::$request::Request("/nodes/$node/qemu/$vmid/agent/network-get-interfaces", null, 'GET');
 
             if ($data != NULL && $data->data != NULL) { 
                 $data = $data->data->result;
@@ -1046,6 +1212,10 @@
                 }
             }
             return '';
+        }
+
+        function getVMOsInfo($node, $vmid) { 
+            return self::$request::Request("/nodes/$node/qemu/$vmid/agent/get-osinfo", null, 'GET'); 
         }
 
         /* 
@@ -1071,10 +1241,10 @@
                             // var_dump(self::$nodes::qemuAgentNetwork($node['name'], $vm->vmid)->data->result);
                             // var_dump(self::$nodes::qemuAgentNetwork($node['name'], $vm->vmid)->data);
                             $status  = self::$nodes::qemuCurrent($node['name'], $vm->vmid)->data;
-                            $os_info = self::$nodes::qemuOsInfo($node['name'], $vm->vmid)->data;
+                            $os_info = self::getVMOsInfo($node['name'], $vm->vmid)->data;
                             $config  = explode('::', self::getVMConfig($vm->vmid, $node['name'])->description);
                             $data = array(
-                                'disk'   => $vm->disk,
+                                'disk'   => ($vm->maxdisk > 1073741824) ? ($vm->maxdisk / 1073741824) . 'Gb' : ($vm->maxdisk / 1048576) . 'Mb',
                                 'uptime' => $vm->uptime, 
                                 'maxmem' => ($vm->maxmem / 1073741824),
                                 'cpus'   => $vm->cpus,
@@ -1099,6 +1269,49 @@
                     }
                 }
                 return $vms;
+            }
+            return $vms;
+        }
+
+        function getAllVMs( array $users) {
+
+            $vms = array();
+
+            foreach (self::getNodes()->data as $node) { 
+                
+                foreach (self::getVMs($node->node)->data as $vm) { 
+                    
+                    $os_info = self::getVMOsInfo($node->node, $vm->vmid)->data;
+                    $status  = self::$nodes::qemuCurrent($node->node, $vm->vmid)->data;
+
+                    foreach ($users as $user) { 
+                        if (stripos($vm->name, $user['name']) !== false) {
+                            $upSec   = str_pad($vm->uptime %60, 2, '0', STR_PAD_LEFT);
+                            $upMins  = str_pad(floor(($vm->uptime % 3600)/60), 2, '0', STR_PAD_LEFT);
+                            $upHours = str_pad(floor(($vm->uptime % 86400)/3600), 2, '0', STR_PAD_LEFT);
+                            $upDays  = str_pad(floor(($vm->uptime % 2592000)/86400), 2, '0', STR_PAD_LEFT);
+
+                            $os_info = (($os_info == NULL) ? 'missing agent' : (($os_info->result->id == 'windows') ? 'mswindows' : $os_info->result->id));
+                                                        
+                            $data = array(
+                                'name'    => $vm->name,
+                                'node'    => $node->node,
+                                'vmid'    => $vm->vmid,
+                                'os'      => $os_info,
+                                'status'  => ($status != NULL) ? $status->status : 'unknown',
+                                'maxmem'  => ($vm->maxmem > 1073741824) ? ($vm->maxmem / 1073741824) . 'Gb' : ($vm->maxmem / 1048576) . 'Mb',
+                                'maxdisk' => ($vm->maxdisk > 1073741824) ? ($vm->maxdisk / 1073741824) . 'Gb' : ($vm->maxdisk / 1048576) . 'Mb',
+                                'cpus'    => $vm->cpus,
+                                'uptime'  => "{$upDays}D {$upHours}:{$upMins}:{$upSec}",
+                                'conn'    => self::getVMNetworking($node->node, $vm->vmid),
+                            );
+                            $data['token'] = array(
+                                'conn_start', $data['name'], self::$guacamole->generateConn_new($data)
+                            );
+                            array_push($vms, $data);
+                        }
+                    }
+                }
             }
             return $vms;
         }
@@ -1167,7 +1380,7 @@
             $vm   = self::$nodes::qemu($node, $vmid)->data;
 
             $status  = self::$nodes::qemuCurrent($node['name'], $vm->vmid)->data;
-            $os_info = self::$nodes::qemuOsInfo($node['name'], $vm->vmid)->data;
+            $os_info = self::getVMOsInfo($node['name'], $vm->vmid)->data;
             $config  = explode('::', self::getVMConfig($vm->vmid, $node['name'])->description);
             $data = array(
                 'disk'   => $vm->disk,
@@ -1326,7 +1539,8 @@
             if ($node == null) { 
                 $node = self::getNode($vmid);            
             }
-            return self::$nodes::qemuDelete($node, $vmid);
+
+            return self::$request::Request("/nodes/$node/qemu/$vmid", array(), 'DELETE');
         }
 
         function rebootVM($vmid = null, $name = null, $node = null) { 
