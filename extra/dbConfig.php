@@ -18,7 +18,7 @@ if ($INFO['guac_login']) {
     $DBPort = $INFO["sql_port"];
     $DBUser = $INFO["sql_user"];
     $DBPass = $INFO["sql_pass"];
-    $DBName = $INFO["sql_database"];
+    $DBName = $INFO["sql_db"];
 }
 
 try { 
@@ -32,6 +32,22 @@ try {
     die();
 }
 
+$DBHost_login = $INFO["sql_host"];
+$DBPort_login = $INFO["sql_port"];
+$DBUser_login = $INFO["sql_user"];
+$DBPass_login = $INFO["sql_pass"];
+$DBName_login = $INFO["sql_db"];
+
+try { 
+    $DB_login = new PDO("mysql:host=$DBHost_login;port=$DBPort_login;dbname=$DBName_login", $DBUser_login, $DBPass_login);
+    $DB_login->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $DB_login->setAttribute(PDO::MYSQL_ATTR_INIT_COMMAND, "SET NAMES 'utf8mb4'");
+} catch(PDOException $e) {
+    # echo 'ERROR: ' . $e->getMessage();
+    $msg = "Database connection failed. Please contact your system administrator.";
+    include ('error.php');
+    die();
+}
 
 
 /*

@@ -7,9 +7,9 @@ require $_SERVER['DOCUMENT_ROOT'].'/../composer/vendor/autoload.php';
 use Duo\DuoUniversal\Client;
 use Duo\DuoUniversal\DuoException;
 
-// Check if the user is already logged in, if yes then redirect him to servers
-if(isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true){
-    header("location: ../servers.php");
+// Check if the user is already logged in, if yes then redirect them to admin/index.php
+if(isset($_SESSION["admin_loggedin"]) && $_SESSION["admin_loggedin"] === true) {
+    header("location: $serverBase/admin/index.php");
     exit;
 }
 
@@ -17,7 +17,7 @@ $duo_client = new Client(
 	$INFO['duo_ikey'],
 	$INFO['duo_skey'],
 	$INFO['duo_api'],
-	"{$serverBase}/{$INFO['duo_redir']}"
+	"{$serverBase}/admin{$INFO['duo_redir']}",
 );
 
 $msg = "";
@@ -25,8 +25,6 @@ $msg = "";
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 	if (isset($_POST["name"]) && isset($_POST["password"])) {
-
-
 
 		$username = filter_var($_POST["name"], FILTER_SANITIZE_STRING);
 		$password = filter_var($_POST["password"], FILTER_SANITIZE_STRING);
@@ -44,8 +42,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 				$msg = "You must enter all fields";
 
 			} else {
+
+				$login_status = $loginHanlder->login($username, $password);
 				
-				if ($loginHanlder->login($username, $password)) { 
+				if ($login_status) { 
 					
 					try {
 						$duo_client->healthCheck();
@@ -59,6 +59,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 					$_SESSION['duo_state'] = $duo_client->generateState();
 					$_SESSION['username']  = $username;
 					$_SESSION['loggedin']  = false;
+                    $_SESSION['admin_loggedin'] = false;
+
 
 					$prompt_uri = $duo_client->createAuthUrl($username, $_SESSION['duo_state']);
 					header("Location: $prompt_uri");			
@@ -109,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 				$decoded_token = $duo_client->exchangeAuthorizationCodeFor2FAResult($duo_code, $username);
 			} catch (DuoException $e) {
 				$errorMSG = "Error decoding Duo result. Confirm device clock is correct.";
-				$returnPage = $serverBase."/login_form/login.php";
+				$returnPage = $serverBase."/admin/login/login.php";
 				include ($_SERVER['DOCUMENT_ROOT']."/extra/error.php");
 				die();
 			}
@@ -119,27 +121,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 			session_start();
 			$_SESSION['username'] = $username;
 			$_SESSION['loggedin'] = true;
+			$_SESSION['admin_loggedin'] = true;
 			$_SESSION['state']    = substr($saved_state, 0, 10); 
 
-			header("Location: $serverBase/servers.php"); // logged in successfully, send to main page
+			header("Location: $serverBase/admin/index.php"); // logged in successfully, send to main page
 			exit();
 
 		} else { 
 			$errorMSG = "Something mysterious happened!";
-			$returnPage = $serverBase."/login_form/login.php";
+			$returnPage = $serverBase."/admin/login/login.php";
 			include ($_SERVER['DOCUMENT_ROOT']."/extra/error.php");
 			die();
 		}
 	}
 }
-
 ?>
 
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 	<head>
 		<meta http-equiv="Content-Type" content="text/html" />
-		<title>Login</title>
+		<title>Admin Login</title>
 		<meta name="description" content="Login page"/>
 		<meta name="keywords" content="login"/>
 		<meta charset="UTF-8">
@@ -166,32 +168,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-u1OknCvxWvY5kfmNBILK2hRnQC3Pr17a+RTT6rIHI7NnikvbZlHgTPOOmMi466C8" crossorigin="anonymous"></script>
 	</head>
 	<body class="text-center bg-dark">
-		<div>
-			<form class="form-signin mx-auto" name="frmlogin" id="frmlogin" action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" >
-				<h1 class="h3 mb-3 font-weight-normal">Login</h1>
-				<?php if (!empty($msg)) { ?>
-					<div class='alert alert-danger alert-dismissible fade show' role='alert'>
-						<?php echo $msg; ?>
-						<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
-					</div>
-				<?php } ?>
-				<label for="name" class="sr-only">Username</label>
-				<input type="username" name="name" id="name" class="form-control" placeholder="Username" required autofocus>
-				<label for="password" class="sr-only">Password</label>
-				<input type="password" id="password" name="password" class="form-control" placeholder="Password" required>
-				<div class="checkbox mb-3">
-					<label>
-					<input type="checkbox" value="remember-me"> Remember me
-					</label>
+		<form class="form-signin mx-auto" name="frmregister" action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" >
+			<h1 class="h3 mb-3 font-weight-normal">Admin Login</h1>
+			<?php if (!empty($msg)) { ?>
+				<div class='alert alert-danger alert-dismissible fade show' role='alert'>
+					<?php echo $msg; ?>
+					<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
 				</div>
-			</form>
-			<div class="text-center bg-dark">
-				<input class="btn btn-lg btn-primary btn-block" type="submit" form="frmlogin" value="Sign in">
-				<?php if ($loginHandler->registrationStatus()) { ?>
-					<a href="<?php echo $serverBase; ?>/login_form/register.php" class="btn btn-lg btn-primary btn-block">Register</a>
-				<?php } ?>
+			<?php } ?>
+			<label for="name" class="sr-only">Username</label>
+			<input type="username" name="name" id="name" class="form-control" placeholder="Username" required autofocus>
+			<label for="password" class="sr-only">Password</label>
+			<input type="password" id="password" name="password" class="form-control" placeholder="Password" required>
+			<div class="checkbox mb-3">
+				<label>
+				<input type="checkbox" value="remember-me"> Remember me
+				</label>
 			</div>
-		</div>
+			<button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
+		</form>
 	</body>
 </html>
 

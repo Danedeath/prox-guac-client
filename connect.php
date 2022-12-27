@@ -195,7 +195,7 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
             }
 
             // Instantiate client, using an HTTP tunnel for communications.
-            //http://guacamole.apache.org/doc/guacamole-common-js/Guacamole.WebSocketTunnel.html
+            // http://guacamole.apache.org/doc/guacamole-common-js/Guacamole.WebSocketTunnel.html
             var ws_scheme = window.location.protocol == "https:" ? "wss" : "ws";
             var ws_path   = ws_scheme + '://<?php echo $data['server'].(!empty($data['port']) ? ':'.$data['port'] : ''); ?>';
             var tunnel    = new Guacamole.WebSocketTunnel(ws_path);
@@ -239,15 +239,16 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
             };
 
             guac.onfile = function(stream, mimetype, filename){
-                stream.sendAck('OK', Guacamole.Status.Code.SUCCESS);  // 告知收到流
+                stream.sendAck('OK', Guacamole.Status.Code.SUCCESS);  // Send ACK to the server
                 reader = new Guacamole.BlobReader(stream, mimetype);
                 swal({ 
                     title: "Downloading '" + filename + "'...",
                     type: 'info',
                     position: 'top',
                     toast: true,
-                    showConfirmButton: false
+                    showConfirmButton: true
                 });
+
                 reader.onend = function() {
                     var blob_data = reader.getBlob(); 
                     swal.close(); 
@@ -266,34 +267,41 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
                 if (ev.dataTransfer.items) {
                     for (var i = 0; i < ev.dataTransfer.items.length; i++) {
                         if (ev.dataTransfer.items[i].kind === 'file') {
+
                             var file = ev.dataTransfer.items[i].getAsFile();
                             var reader = new FileReader();
+
+                            console.log('uploading file: ' + file.name);
+
                             swal({ 
                                 title: "uploading '" + file.name + "' to the VM",
                                 type: 'info',
                                 position: 'top',
                                 toast: true,
-                                showConfirmButton: false
+                                showConfirmButton: true
+
                             });
+
                             reader.onloadend = function fileContentsLoaded (e){
                                 const stream = guac.createFileStream(file.type, file.name);
                                 var bufferWriter = new Guacamole.ArrayBufferWriter(stream);
                                 bufferWriter.sendData(reader.result);
-                                bufferWriter.oncomplete = function() {
-                                    swal.close();
-                                };
                                 bufferWriter.sendEnd();
                             };
-                            
+
+                            reader.onend = function() { 
+                                swal.close();
+                            }
 
                             reader.readAsArrayBuffer(file);
                         }
                     }
                 } else {
                     for (var i = 0; i < ev.dataTransfer.files.length; i++) {
-                    console.log(ev.dataTransfer.files[i].name);
+                        console.log(ev.dataTransfer.files[i].name);
                     }
                 }
+
                 // Drag and drop files to the window to block, so that the browser does not prompt to open/download
                 return false;
 
@@ -379,6 +387,7 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
                         // Copy the blob data (usually a picture) to the client clipboard
                         var blob_data = reader.getBlob();
                         clipboard.value = atob(blob_data);
+                        
                         // Chrome only triggers the current function when text is copied, others do not trigger, for unknown reasons.
                     };
                 }
@@ -434,7 +443,7 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
                 if (state == 5){
                     reconnect();
                 } else if (state == 3){
-                    console.log(guac.getDisplay.size);
+                    console.log('connected to host <?php echo $data['title'].'-'.$_SESSION['username']; ?> using guac!');
                     guac.sendSize(window.innerWidth-10, window.innerHeight-60);
                     $(window).resize(function(){
                         guac.sendSize(window.innerWidth-10, window.innerHeight-60);

@@ -103,6 +103,7 @@ if (!empty($running_nodes)) {
               <a class="dropdown-item" href="#"> Edit settings </a>
               <a class="dropdown-item" href="#"> Edit profile page </a>
               <a class="dropdown-item" href="#"> Show profile page </a>
+              <a class="dropdown-item" href="<?php echo $INFO['cape_sandbox']; ?>"> Cape Sandbox </a>
               <div class="dropdown-divider"></div>
               <a class="dropdown-item" href="../login/logout.php"> Logout </a>
             </div>

@@ -297,7 +297,7 @@
         public function deleteToken($data) { 
 
             // delete the token from the database!
-            $query = 'delete from reset_tokens where username = :user and reset_token = :token';
+            $query = 'update reset_tokens set expired = 1 where user = :user and reset_token = :token';
             $query_params = array(
                 ':user' => $data['user'],
                 ':token' => $data['token']
@@ -584,8 +584,13 @@
             return $stmt->fetchAll();
         }
 
+        /* 
+        * getUserByID will return the user with the provided id
+        * @param $userid - the id of the user
+        * @return array - the user data
+        */
         public function getUserByID($userid) { 
-            $query = 'select * from users where id = :userid';
+            $query = 'select id, username, email, reg_date, login_date  from users where id = :userid';
             $query_params = array(
                 ':userid' => $userid
             );
@@ -602,9 +607,198 @@
 
             return $stmt->fetch();
         }
+
+        /* 
+        * getUserByEmail will return the user with the provided email
+        * @param $email - the email of the user
+        * @return array - the user or false if not found
+        */
+        public function getUserByEmail($email) { 
+            $query = 'select * from users where email = :email';
+            $query_params = array(
+                ':email' => $email
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            $result = $stmt->fetch();
+            if ($result) { 
+                return $result;
+            } else { 
+                return false;
+            }
+        }
+
+        /* 
+        * getUserByName will return the user with the provided username
+        * @param $username - the username of the user
+        * @return array - the user or false if not found
+        */        
+        public function getUserByName($username) { 
+            $query = 'select * from users where username = :username';
+            $query_params = array(
+                ':username' => $username
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            $result = $stmt->fetch();
+            if ($result) { 
+                return $result;
+            } else { 
+                return false;
+            }
+        }
+
+        public function updateUser($userData) { 
+
+            $query = 'update users set username = :username, email = :email where id = :id';
+            $query_params = array(
+                ':username' => $userData['username'],
+                ':email' => $userData['email'],
+                ':id' => $userData['id']
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            return array(
+                'status' => 'success',
+                'message' => 'User updated successfully'
+            );
+        }
+
+        public function deleteUser($userData) { 
+
+            // ensure that the user is not the only admin (if at all)...
+            $query = 'select id from users where is_admin = 1';
+            
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute();
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+            
+            if ($stmt->rowCount() == 1 && $stmt->fetch()['id'] == $userData['id']) { // only one admin and it's the user we're deleting, so don't allow it
+                return array(
+                    'status' => 'error',
+                    'message' => 'You cannot delete the only admin user'
+                );
+            } else { // multiple admins avaiable and we're not deleting the only one, so delete the user
+                
+                // create an array of queries to run when deleting a user
+                $queries = array(
+                    0 => array( 0 => 'delete from permissions where userid = :id', 1 => array(':id' => $userData['id'] )),
+                    1 => array( 0 => 'delete from users where id = :id', 1 => array(':id' => $userData['id']))
+                );
+
+                foreach ($queries as $query) { 
+
+                    try { 
+                        $stmt = $this->db->prepare($query[0]);
+                        $result = $stmt->execute($query[1]);
+                    } catch(PDOException $ex) { 
+                        return array(
+                            'status' => 'error',
+                            'message' => 'Failed to run query: ' . $ex->getMessage()
+                        );
+                    }
+                }
+
+                return array(
+                    'status' => 'success',
+                    'message' => 'User deleted successfully'
+                );
+            }
+        }
+
+        public function suspsendUser($userData) { 
+
+            // make sure the user is not the only admin
+            $query = 'select id from users where is_admin = 1 and id != :id;';
+            $query_params = array(
+                ':id' => $userData['id']
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            if (!empty($stmt->fetchAll())) { 
+
+                $query = 'update users set is_active = 0 where id = :id';
+                $query_params = array(
+                    ':id' => $userData['id']
+                );
+
+                try { 
+                    $stmt = $this->db->prepare($query);
+                    $result = $stmt->execute($query_params);
+                } catch(PDOException $ex) { 
+                    return array(
+                        'status' => 'error',
+                        'message' => 'Failed to run query: ' . $ex->getMessage()
+                    );
+                }
+
+                // assume the update was successful, and then return the result
+                $result = $stmt->rowCount();
+                if ($result > 0) { 
+                    return array(
+                        'status' => 'success',
+                        'message' => 'The user <strong>' . $userData['username'] . '</strong> has been suspended'
+                    );
+                } else { 
+                    return array(
+                        'status' => 'error',
+                        'message' => 'The user <strong>' . $userData['username'] . '</strong> could not be suspended'
+                    );
+                }
+
+            } else { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'You cannot suspend the only admin user'
+                );
+            }
+
+        }
     }
 
-    class connectionManager { 
+    class ConnectionManager { 
 
         protected $db;
 
@@ -616,6 +810,23 @@
             } else { 
                 $this->db = $DB;
             }
+        }
+
+        // getAllConnections will collect all of the connections from the database
+        public function getConnections() { 
+
+            $query = "select * from connections";
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute();
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            $rows = $stmt->fetchAll();
+
+            return $rows;
         }
 
         // getConnection will collect the connection information for the provided connection ID
@@ -638,6 +849,7 @@
             }
 
             $row = $stmt->fetch();
+
             return $row;
         }
 
@@ -648,7 +860,7 @@
 
             $userID = (int) filter_var($userID, FILTER_SANITIZE_NUMBER_INT);
 
-            $query = 'select * from connections where shared_with like concat("%", :userid, "%"';
+            $query = 'select * from connections where sharedwith like concat("%", :userid, "%"';
             $query_params = array(
                 ':userid' => $userID
             );
@@ -664,7 +876,7 @@
 
             $shared_conns = array();
             foreach ($rows as $row) { 
-                $sharedIDs = explode(',', $row['shared_with']);
+                $sharedIDs = explode(',', $row['sharedwith']);
                 if (in_array($userID, $sharedIDs)) { 
                     push_array($shared_conns, $row);
 
@@ -673,6 +885,291 @@
             return $shared_conns;
         }
 
+        // getOwnedConnections will collect the connections that have been assigned with the userID
+        // @param $userid - the userID to collect the owned connections for
+        // @return array - the connections owned by a user
+        public function getOwnedConnections($userID) { 
+
+            $query = 'select * from connections where owner = :userid';
+            $query_params = array(
+                ':userid' => $userID
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return false;
+            }
+
+            return $stmt->fetchAll();
+        }
+
+        // createConnection will create a new connection in the database, however a user can only have one connection with the same name
+        public function createConnection($conn_data) { 
+
+            // serach for an existing connection with the same name, and owner
+            $query = 'select id from connections where name = :name and owner = :owner';
+            $query_params = array(
+                ':name' => $conn_data['name'],
+                ':owner' => $conn_data['owner']
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            $row = $stmt->fetch();
+
+            if (!empty($row)) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'A connection with the name <strong>' . $conn_data['name'] . '</strong> already exists'
+                );
+            }
+
+            // connection does not exist, so create it! but first, sanitize the data and encrypt the password!
+            $conn_data['password'] = $this->protectPassword($conn_data, $conn_data['password']);
+
+            $query = 'insert into connections (name, hostname, port, username, password, owner, protocol, os) values (:name, :host, :port, :username, :password, :owner, :protocol, :os)';
+            $query_params = array(
+                ':name' => $conn_data['name'],
+                ':host' => $conn_data['host'],
+                ':port' => $conn_data['port'],
+                ':username' => $conn_data['username'],
+                ':password' => $conn_data['password'],
+                ':owner' => $conn_data['owner'],
+                ':protocol' => $conn_data['protocol'],
+                ':os' => $conn_data['os']
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            $count = $stmt->rowCount(); // check the rows effected by the query, it should be 1. if not, something went wrong!
+            if ($count == 0) { 
+                return array(
+                    'status' => 'error',
+                    'message' => '<strong>Failed to create connection,</strong> something went wrong!'
+                );
+            }
+
+            return array(
+                'status' => 'success',
+                'message' => 'Connection created successfully'
+            );
+        }
+
+        // updateConnection will update a connection in the database, however a user can only have one connection with the same name
+        // @param $conn_data - the connection data to update
+        // @return array - the status of the update
+        public function updateConnection($conn_data) { 
+
+            // get the existing connection data, if the name, host, or port has changed; update the password encryption!
+            $existing_conn = filter_var($this->getConnection($conn_data['id']));
+
+            // check if the connection actually exists...
+            if ($existing_conn == false || empty($existing_conn) || is_null($existing_conn)) { 
+                return array(
+                    'status' => 'error',
+                    'message' => '<strong>Failed to update the connection,</strong>Connection does not exist'
+                );
+            }
+
+            // check if the new connection name is already in use by the user!
+            $query = 'select id from connections where name = :name and owner = :owner and id != :id';
+            $query_params = array(
+                ':name' => $conn_data['name'],
+                ':owner' => $conn_data['owner'],
+                ':id' => $conn_data['id']
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            $row = $stmt->fetch();
+
+            if (!empty($row)) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'A connection with the name <strong>' . $conn_data['name'] . '</strong> already exists'
+                );
+            }
+
+            if ($existing_conn['name'] != $conn_data['name'] || $existing_conn['host'] != $conn_data['host'] || $existing_conn['port'] != $conn_data['port']) { 
+                $conn_data['password'] = $this->unprotectPassword($existing_conn, $existing_conn['password']);
+                $conn_data['password'] = $this->protectPassword($conn_data, $conn_data['password']);
+            }
+
+            $query = 'update connections set name = :name, host = :host, port = :port, username = :username, password = :password, modified = CURRENT_TIMESTAMP() where id = :id';
+            $query_params = array(
+                ':name' => $conn_data['name'],
+                ':host' => $conn_data['host'],
+                ':port' => $conn_data['port'],
+                ':username' => $conn_data['username'],
+                ':password' => $conn_data['password'],
+                ':id' => $conn_data['id']
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            $count = $stmt->rowCount(); // check the rows effected by the query, it should be 1. if not, something went wrong!
+            if ($count == 0) { 
+                return array(
+                    'status' => 'error',
+                    'message' => '<strong>Failed to update connection,</strong> something went wrong!'
+                );
+            }
+
+            return array(
+                'status' => 'success',
+                'message' => 'Connection updated successfully'
+            );
+        }
+
+        // deleteConnection will delete a connection from the database
+        // @param $conn_data - the connection data to delete
+        // @return array - the status of the delete
+        public function deleteConnection($conn_data) { 
+
+            // check if connection actually exists!
+
+            $query = 'delete from connections where id = :id and owner = :owner';
+            $query_params = array(
+                ':id' => $conn_data['id'],
+                ':owner' => $conn_data['owner']
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            $count = $stmt->rowCount(); // check the rows effected by the query, it should be 1. if not, something went wrong!
+            if ($count == 0) { 
+                return array(
+                    'status' => 'error',
+                    'message' => '<strong>Failed to delete connection,</strong> something went wrong!'
+                );
+            }
+
+            return array(
+                'status' => 'success',
+                'message' => 'Connection deleted successfully'
+            );
+        }
+
+        // updateActive will update the lastactive field of a connection
+        // @param $conn_data - the connection data to update
+        // @return array - the status of the update
+        public function updateActive($conn_data) { 
+
+            // check if connection actually exists!
+            $conn = $this->getConnection($conn_data['id']);
+
+            if ($conn == false || empty($conn) || is_null($conn)) { 
+                return array(
+                    'status' => 'error',
+                    'message' => '<strong>Failed to set connection as active,</strong> connection does not exist!'
+                );
+            }
+
+            $query = 'update connections set lastactive = CURRENT_TIMESTAMP() where id = :id and (owner = :owner or sharedwith LIKE concat(\'%\', :owner, \'%\'))';
+            $query_params = array(
+                ':id' => $conn_data['id'],
+                ':owner' => $conn_data['owner']
+            );
+
+            try { 
+                $stmt = $this->db->prepare($query);
+                $result = $stmt->execute($query_params);
+            } catch(PDOException $ex) { 
+                return array(
+                    'status' => 'error',
+                    'message' => 'Failed to run query: ' . $ex->getMessage()
+                );
+            }
+
+            $count = $stmt->rowCount(); // check the rows effected by the query, it should be 1. if not, something went wrong!
+
+            if ($count == 0) { 
+                return array(
+                    'status' => 'error',
+                    'message' => '<strong>Failed to set connection as active,</strong> something went wrong!'
+                );
+            }
+
+            return array(
+                'status' => 'success',
+                'message' => 'Connection set as active successfully'
+            );
+        }
+
+        // protectPassword will encrypt the password using the connection data, this will allow for a secure method of storing passwords in the DB.
+        // @param $conn_data - the connection data to use for encryption
+        // @param $password - the password to encrypt
+        // @return string - the encrypted password
+        protected function protectPassword($conn_data, $password) { 
+            
+            // generate the key using portions of the connection data!
+
+            $key = $_SERVER['SERVER_NAME'] . $conn_data['host'] . $conn_data['port'] . $conn_data['username'];
+            $key = hash('sha256', $key);
+
+            $iv = random_bytes(16); // generate a random IV
+            $value = \openssl_encrypt($password, "AES-256-CBC", $INFO["enc_key"], 0, $iv);
+
+            $encrypted = base64_encode($iv . $value);
+
+            return $encrypted;
+        }
+
+        // unprotectPassword will decrypt the password using the connection data, this will be used for updating the password & connecting to the machine.
+        // @param $conn_data - the connection data to use for decryption
+        // @param $password - the password to decrypt
+        protected function unprotectPassword($conn_data) { 
+
+            $key = $_SERVER['SERVER_NAME'] . $conn_data['host'] . $conn_data['port'] . $conn_data['username'];
+            $key = hash('sha256', $key);
+
+            $data = base64_decode($conn_data['password']);
+            $decrypted = \openssl_decrypt(substr($data, 16), "AES-256-CBC", $INFO["enc_key"], 0, substr($data, 0, 16));
+
+            return $decrypted;
+        }
     }
 
     class GuacLoginHandler {
@@ -1194,6 +1691,12 @@
             return $matched_vms;
         }
 
+        /*
+            getVMNetworking will return the connection IP addresses of the VM
+            @param $node: The node the VM is on
+            @param $vmid: The ID of the VM
+            @return: The IP address of the VM
+        */
         function getVMNetworking($node, $vmid) { 
             $data = self::$request::Request("/nodes/$node/qemu/$vmid/agent/network-get-interfaces", null, 'GET');
 
@@ -1214,6 +1717,12 @@
             return '';
         }
 
+        /* 
+            getVMOsInfo will return the OS information of the VM
+            @param $node: The node the VM is on
+            @param $vmid: The ID of the VM
+            @return: The OS information of the VM
+        */
         function getVMOsInfo($node, $vmid) { 
             return self::$request::Request("/nodes/$node/qemu/$vmid/agent/get-osinfo", null, 'GET'); 
         }
@@ -1273,6 +1782,12 @@
             return $vms;
         }
 
+        /*
+            getAllVMs will collect all of the Virtual Machines on all nodes for all users
+            @param $node: The node the VM is on
+            @param $vmid: The ID of the VM
+            @return: The configuration of the VM
+        */
         function getAllVMs( array $users) {
 
             $vms = array();
@@ -1353,6 +1868,11 @@
 
         }
 
+        /*
+            getNode will collect the node for a specific VM
+            @param $vmid: The ID of the VM
+            @return: The node containing the VM
+        */
         function getNode($vmid) { 
             $nodes = self::getNodes()->data;
             foreach ($nodes as $node) { 
@@ -1365,6 +1885,12 @@
             return null;
         }
 
+        /*
+            getVMConfig will collect the VM configuration for a specific VM
+            @param $vmid: The ID of the VM
+            @param $node: The node containing the VM, if null it will use getNode to find the node
+            @return: The VMs on the node
+        */
         function getVMConfig($vmid, $node = null) { 
             if ($node == null) { 
                 $node = self::getNode($vmid);
@@ -1372,6 +1898,12 @@
             return self::$nodes::qemuConfig($node, $vmid)->data;
         }
 
+        /*
+            getVM will collect data for a specific VM
+            @param $vmid: The ID of the VM
+            @param $node: The node containing the VM, if null it will use getNode to find the node
+            @return: The VMs on the node
+        */
         function getVM($vmid, $node = null) { 
             if ($node == null) { 
                 $node = self::getNode($vmid);
@@ -1432,6 +1964,13 @@
             return $snapshots;
         }
         
+
+        /* 
+            getVMStatus will get the status of a VM
+            @param $vmid: The ID of the VM to get the status of
+            @param $name: The name of the VM to get the status of
+            @param $node: The node containing the VM to get the status of
+        */
         function getVMStatus($vmid, $node) { 
             $status = self::$nodes::qemuCurrent($node, $vmid);
             if ($status) { 
@@ -1445,7 +1984,7 @@
             createSnap will create a snapshot of a VM
             @param $vmid: The ID of the VM to create the snapshot of
             @param $name: The name of the VM to create the snapshot of
-            @param $node: The node to create the snapshot of the VM in
+            @param $node: The node containing the VM to create the snapshot of
         */
         function createSnap($vmid = null, $name = null, $node = null, $data = array()) { 
 
@@ -1469,7 +2008,7 @@
             deleteSnap will delete a snapshot of a VM
             @param $vmid: The ID of the VM to create the snapshot of
             @param $name: The name of the VM to create the snapshot of
-            @param $node: The node to create the snapshot of the VM in
+            @param $node: The node containing the VM to delete the snapshot of
         */
         function deleteSnap($vmid = null, $name = null, $node = null) { 
 
@@ -1484,7 +2023,7 @@
             revertSnap will revert a VM to the previous snapshot
             @param $vmid: The ID of the VM to revert
             @param $name: The name of the VM to revert
-            @param $node: The node to revert the VM in
+            @param $node: The node containing the VM to revert
         */
         function revertVM($vmid= null, $node = null, $name = null) { 
 
@@ -1514,7 +2053,7 @@
             startVM will start a VM
             @param $vmid: The ID of the VM to start
             @param $name: The name of the VM to start
-            @param $node: The node to start the VM in
+            @param $node: The node containing the VM to start
         */
         function startVM($vmid = null, $name = null, $node = null) { 
 
@@ -1525,6 +2064,12 @@
             return self::$nodes::QemuStart($node, $vmid);
         }
 
+        /*
+            stopVM will stop a VM
+            @param $vmid: The ID of the VM to stop
+            @param $name: The name of the VM to stop
+            @param $node: The node containing the VM to stop
+        */
         function stopVM($vmid = null, $name = null, $node = null) { 
 
             if ($node == null) { 
@@ -1534,6 +2079,12 @@
             return self::$nodes::QemuStop($node, $vmid);
         }
 
+        /*
+            deleteVM will delete a VM
+            @param $vmid: The ID of the VM to delete
+            @param $name: The name of the VM to delete
+            @param $node: The node containing the VM to delete
+        */
         function deleteVM($vmid = null, $name = null, $node = null) { 
 
             if ($node == null) { 
@@ -1543,6 +2094,12 @@
             return self::$request::Request("/nodes/$node/qemu/$vmid", array(), 'DELETE');
         }
 
+        /*
+            rebootVM will reboot a VM
+            @param $vmid: The ID of the VM to reboot
+            @param $name: The name of the VM to reboot
+            @param $node: The node containing the VM to reboot
+        */
         function rebootVM($vmid = null, $name = null, $node = null) { 
 
             if ($node == null) { 
@@ -1552,6 +2109,12 @@
             return self::$nodes::QemuReboot($node, $vmid);
         }
 
+        /*
+            resetVM will reset a VM
+            @param $vmid: The ID of the VM to reset
+            @param $name: The name of the VM to reset
+            @param $node: The node containing the VM to reset
+        */
         function resetVM($vmid = null, $name = null, $node = null) { 
 
             if ($node == null) { 
@@ -1560,6 +2123,7 @@
 
             return self::$nodes::QemuReset($node, $vmid);
         }   
+
 
         function suspendVM($vmid = null, $name = null, $node = null) { 
 
@@ -1698,4 +2262,6 @@
             return $msg;
         }
     }
+
+
 ?>

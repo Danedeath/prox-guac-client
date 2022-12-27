@@ -57,6 +57,9 @@
 
         'proxy'         => true,                                         // enable proxy support, assumes protocol is https
         'pepper'        => '',                                           // pepper for passwords, only used if using the native DB!
+        'enable_registration' => false,                                  // enable user registration
+
+        'cape_sandbox'  => '',                                           // link to cape sandbox
     );
 
 ?>
