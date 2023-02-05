@@ -54,6 +54,7 @@ Open Source software used in the project:
      - duo configuration
 
 4. Install the database via the provided .SQL file (dont recommend keeping inside of website...)
+   - Default user/pass: admin@pap.local/admin
 
      
 # Todo
@@ -64,6 +65,8 @@ Open Source software used in the project:
 - Add notifications on download/upload in guacd console
 - Add ability to disable DUO
 - Add TOTP option
+- Finish installation steps through browser
+- Make DB settings matter
 
 
 # Images
