@@ -10,7 +10,7 @@ function endsWith($haystack,$needle,$case=false) {
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     if (isset($_POST['data'])) { 
-        $data = $requestHanlder->unprotect(filter_var($_POST['data'], FILTER_SANITIZE_STRING));
+        $data = $requestHandler->unprotect(filter_var($_POST['data'], FILTER_SANITIZE_STRING));
         $state = $data[0];
         $type  = $data[1];
 
@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     );
                 }
                 sleep(10);
-                header("Location: servers.php?msg={$requestHanlder->protect($alert_msg)}");
+                header("Location: servers.php?msg={$requestHandler->protect($alert_msg)}");
             }
         } 
 
@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     'Error:',
                     "The template '{$template}' is invalid!"
                 );
-                header("Location: servers.php?msg={$requestHanlder->protect($alert_msg)}");
+                header("Location: servers.php?msg={$requestHandler->protect($alert_msg)}");
                 
             } else { 
 
@@ -87,13 +87,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                     $new_vmid       = $proxmox->getAvailableVMID();   
                     $vmname         = !empty($_POST['vm_name']) ? filter_var($_POST['vm_name'], FILTER_SANITIZE_STRING) : end(explode('-', $template)).'-'.$_SESSION['username'];
-                    $description    = !empty($_POST['vm_desc']) ? filter_var($_POST['vm_desc'], FILTER_SANITIZE_STRING) : '';
                     $storage        = !empty($_POST['storage']) ? filter_var($_POST['storage'], FILTER_SANITIZE_STRING) : $INFO['default_store'];
+
+                    // get the template's description, which contains the default user/password
+                    $template_desc = $proxmox->getVMConfig($template_id, $proxmox->getNode($template_id))->description;
 
                     $data = array( 
                         'newid'         => $new_vmid,
                         'name'          => (stripos($vmname, '-') === false) ? $vmname.'-'.$_SESSION['username'] : $vmname,
-                        'description'   => $description,
+                        'description'   => $template_desc,
                         'node'          => $node,
                         'storage'       => $storage,
                         'full'          => True,
@@ -124,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 
     if (isset($_GET['data'])) { 
 
-        $data = $requestHanlder->unprotect(filter_var($_GET['data'], FILTER_SANITIZE_STRING));
+        $data = $requestHandler->unprotect(filter_var($_GET['data'], FILTER_SANITIZE_STRING));
 
         $state  = $data[0];
         $type   = $data[1];
@@ -149,10 +151,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
                         case 'delete':  $proxmox->deleteVM($data[3],  $vmid); break;
                         case 'start':   $proxmox->startVM($data[3],   $vmid); $compare = 'running'; break;
                         case 'stop':    $proxmox->stopVM($data[3],    $vmid); $compare = 'stopped'; break;
-                        case 'restart': $proxmox->restartVM($data[3], $vmid); $compare = 'running'; break;
+                        case 'restart': $proxmox->rebootVM($data[3],  $vmid); $compare = 'running'; break;
                         case 'resume':  $proxmox->resumeVM($data[3],  $vmid); $compare = 'running'; break;
                         case 'suspend': $proxmox->suspendVM($data[3], $vmid); $compare = 'paused'; break;
-                        case 'console': $proxmox->consoleVM($data[3], $vmid, $guacHandler); break;
                     }
     
                     $status  = $proxmox->getVMStatus($data[3], $vmid);

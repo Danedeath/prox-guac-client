@@ -3,7 +3,7 @@
 include './header.php';
 
 if (!isset($_SESSION['admin_loggedin']) || $_SESSION['admin_loggedin'] != true) {
-    header("location: ./login/login.php");
+    header("location: ./login/login.php?next=index");
     exit;
 }
 
@@ -13,7 +13,7 @@ if (empty($running_nodes)) {
     die();
 }
 
-$all_users     = $loginHanlder->getAllUsers();
+$all_users     = $userHandler->getAllUsers();
 $all_vms       = $proxmox->getAllVMs($all_users);
 $totlClustRsc  = $proxmox->getClusterResources();
 $allClustRsc   = $proxmox->getClusterResc();
@@ -81,8 +81,6 @@ foreach ($all_vms as $vm) {
                         <div class="box-tools pull-right">
                             <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
                             </button>
-                            <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i>
-                            </button>
                         </div>
                     </div>
                     <div class="box-body no-padding">
@@ -90,14 +88,14 @@ foreach ($all_vms as $vm) {
                             <thead>
                                 <tr>
                                     <th>VM Name</th>
-                                    <th>IP</th>
+                                    <?php  if (filter_var($user_perms['conn_viewip'],FILTER_VALIDATE_BOOLEAN)) { echo ' <th>IP Address</th>'; } ?>
                                     <th>OS</th>
                                     <th>CPU</th>
                                     <th>RAM</th>
                                     <th>Storage</th>
                                     <th>Uptime</th>
                                     <th>Status</th>
-                                    <th>Node</th>
+                                    <?php  if (filter_var($user_perms['conn_node'],FILTER_VALIDATE_BOOLEAN)) { echo ' <th>Node</th>'; } ?>
                                 </tr>
                             </thead>
                             <tbody>
@@ -108,14 +106,14 @@ foreach ($all_vms as $vm) {
                                     foreach ($all_vms as $vm) {
                                         echo "<tr>";
                                         echo "<td>".$vm['name']."</td>";
-                                        echo "<td>".$vm['conn']."</td>";
+                                        if (filter_var($user_perms['conn_viewip'],FILTER_VALIDATE_BOOLEAN)) { echo "<td>".$vm['conn']."</td>"; }
                                         echo "<td style='color:".$osColor[$vm['os']]." !important'>".$vm['os']."</td>";
                                         echo "<td>".$vm['cpus']."</td>";
                                         echo "<td>".$vm['maxmem']."</td>";
                                         echo "<td>".$vm['maxdisk']."</td>";
                                         echo "<td>".$vm['uptime']."</td>";
                                         echo "<td style='color:".$statColor[$vm['status']]." !important'>".$vm['status']."</td>";
-                                        echo "<td>".$vm['node']."</td>";
+                                        if (filter_var($user_perms['conn_node'],FILTER_VALIDATE_BOOLEAN)) { echo "<td>".$vm['node']."</td>"; }
                                         echo "</tr>";
 
                                     }
@@ -133,9 +131,6 @@ foreach ($all_vms as $vm) {
                     <div class="box-tools pull-right">
                         <button type="button" class="btn btn-box-tool" data-widget="collapse">
                             <i class="fa fa-minus"></i>
-                        </button>
-                        <button type="button" class="btn btn-box-tool" data-widget="remove">
-                            <i class="fa fa-times"></i>
                         </button>
                     </div>
                 </div>
@@ -244,7 +239,7 @@ foreach ($all_vms as $vm) {
                 }],
             },
             options: {
-                cutout: '70%',
+                cutout: '80%',
                 responsive: true,
                 circumference: 180,
                 rotation: -90,

@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET' || $_SERVER['REQUEST_METHOD'] == 'POST')
         </div>
     <?php } 
     if (isset($_GET['msg'])) { // dynamicaly display alert!
-        $msg = $requestHanlder->unprotect(filter_var($_GET['msg'], FILTER_SANITIZE_STRING));
+        $msg = $requestHandler->unprotect(filter_var($_GET['msg'], FILTER_SANITIZE_STRING));
     ?>
         <div class="row pb-5">
             <div class="alert alert-<?php echo $msg[1]; ?> alert-dismissible fade show" role="alert">    

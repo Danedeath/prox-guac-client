@@ -28,6 +28,8 @@ Open Source software used in the project:
 - Proxmox VE 7.2: https://www.proxmox.com/en/proxmox-ve
 - MariaDB/MYSQL
 - PHP 7.4 or 8.0: https://www.php.net/
+- guacamole-lite or guacd server: 
+  - https://github.com/vadimpronin/guacamole-lite
 
 # Assumptions
 - All VMs being used by this system are required to have the QEMU guest agent running
@@ -46,29 +48,23 @@ Open Source software used in the project:
 
 3. Configure the prox-guac-client by modifying /extra/config.php with the required information
    - Currently required: 
-     - guacamole database connection
-     - guacamole connection 
+     - database connection
+     - guacd connection 
      - proxmox configuration settings
      - duo configuration
+
+4. Install the database via the provided .SQL file (dont recommend keeping inside of website...)
+
      
 # Todo
 
-- Transition from Guacamole Auth to custom Auth
 - Implement more statistics for VMs
 - Possibly replace display of VMs from a table to cards
 - Add password reset (for VM) and automatically poll user accounts 
-- Add an administration backend
-- Add profile page
-- Add settings page
 - Add notifications on download/upload in guacd console
 - Add ability to disable DUO
 - Add TOTP option
-- SQL Items: 
-  - Securely store VM connection information
-  - Add permission system 
-  - Add session storage
-  - Add account reset systems
-- Add account throttling
+
 
 # Images
 
@@ -79,3 +75,11 @@ Open Source software used in the project:
 ![VM Management](/images/vm_man.png)
 
 ![Snapshot Management](/images/snapman.png)
+
+![Admin Login Page](/images/admin_login.PNG)
+
+![Admin Overview Page](/images/admin_index.png)
+
+![User management](/images/user_management.PNG)
+
+![Role Management](/images/role_management.PNG)

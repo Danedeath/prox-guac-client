@@ -7,14 +7,24 @@
     $root       = $_SERVER['DOCUMENT_ROOT'];
     $serverBase = ($INFO['proxy'] ? 'https://' : (empty($_SERVER['HTTPS']) ? 'http://' : 'https://')).$_SERVER['HTTP_HOST']; 
 
-    $loginHanlder   = new GuacLoginHandler();
     $proxmox        = new Proxmox();
     $guacamole      = new GaucamoleHandler($INFO);
     $requestHandler = new RequestHandler();
-    $userHandler    = new UserHandler($DB_login);
-    $settings       = new SettingsHandler($DB_login);
-    $dbLogin        = new LoginHandler($DB_login);
-    $connManager    = new ConnectionManager($DB_login);
+    $userHandler    = new UserHandler($DB);
+    $settHandler    = new SettingsHandler($DB);
+    $dbLogin        = new LoginHandler($DB);
+    $connManager    = new ConnectionManager($DB);
+    $roleHandler    = new roleHandler($DB);
+    $permHandler    = new PermissionHandler($DB);
+
+    // collect the IP address of the user for the session!
+    if (isset($_SERVER['HTTP_CF_CONNECTING_IP']) && $_SERVER['HTTP_CF_CONNECTING_IP'] != '') {
+        $_SERVER['REMOTE_ADDR'] = $_SERVER['HTTP_CF_CONNECTING_IP'];
+    } else if (isset($_SERVER['HTTP_X_FORWARDED_FOR']) && $_SERVER['HTTP_X_FORWARDED_FOR'] != '') {
+        $_SERVER['REMOTE_ADDR'] = $_SERVER['HTTP_X_FORWARDED_FOR'];
+    } else { 
+        $_SERVER['REMOTE_ADDR'] = $_SERVER['REMOTE_ADDR'];
+    }
 
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
@@ -24,6 +34,15 @@
     $running_nodes = array();
 
     if (isset($_SESSION['admin_loggedin']) && $_SESSION['admin_loggedin'] == true) {
+
+        $user          = $userHandler->getUserByName($_SESSION['username']);
+        $user_perms    = $permHandler->getPermissions($user['id']);    
+
+        if (!filter_var($user_perms['admin'],FILTER_VALIDATE_BOOLEAN)) {
+            $errorMSG = "You do not have permission to access this page!";
+            include 'extra/error.php';
+            die();
+        }
         
         if ($nodes) { 
             foreach ($nodes as $node) { 
@@ -92,7 +111,7 @@
         <nav id="main-navbar" class="navbar navbar-expand-lg fixed-top navbar-lightblue">
             <!-- Container wrapper -->
             <div class="container-fluid">
-                <a class="navbar-brand" href="">
+                <a class="navbar-brand server-brand" href="index.php">
                     <b>Proxmox Admin Panel</b>
                 </a>  
 
@@ -139,34 +158,41 @@
                                 <i class="fas fa-tachometer-alt fa-fw me-3"></i>
                                 <span>Overview</span>
                             </a>
-                            <a href="connections.php" class="list-group-item list-group-item-action py-2 ripple" id="connectionsPage">
-                                <i class="fas fa-chart-area fa-fw me-3"></i>
-                                <span>Connections</span>
-                            </a>
-                            <li class="treeview">
-                                <a href="#" class="list-group-item list-group-item-action py-2 ripple">
-                                    <i class="fas fa-users fa-fw me-3"></i>
-                                    <span>User Management</span>
+                            <?php if (filter_var($user_perms['connections'],FILTER_VALIDATE_BOOLEAN)) { ?>
+                                <a href="connections.php" class="list-group-item list-group-item-action py-2 ripple" id="connectionsPage">
+                                    <i class="fas fa-chart-area fa-fw me-3"></i>
+                                    <span>Connections</span>
                                 </a>
-                                <ul class="treeview-menu ms-4">
-                                    <li>
-                                        <b style="color:white; align:center;">Users</b>
-                                    </li>
-                                    <li class="pb-3">
-                                        <a href="userman.php">Manage Users</a>
-                                    </li>
-                                    <li>
-                                        <b style="color:white; align:center;">Role Management</b>
-                                    </li>
-                                    <li>
-                                        <a href="groups.php">Groups</a>
-                                    </li>
-                                </ul>
-                            </li>
-                            <a href="settings.php" class="list-group-item list-group-item-action py-2 ripple">
-                                <i class="fas fa-gears fa-fw me-3"></i>
-                                <span>Settings</span>
-                            </a>                               
+                            <?php } if (filter_var($user_perms['userman'],FILTER_VALIDATE_BOOLEAN) || filter_var($user_perms['roles'],FILTER_VALIDATE_BOOLEAN)) { ?>
+                                <li class="treeview">
+                                    <a href="#" class="list-group-item list-group-item-action py-2 ripple">
+                                        <i class="fas fa-users fa-fw me-3"></i>
+                                        <span>User Management</span>
+                                    </a>
+                                    <ul class="treeview-menu ms-4">
+                                        <?php if (filter_var($user_perms['userman'],FILTER_VALIDATE_BOOLEAN)) { ?>
+                                            <li>
+                                                <b style="color:white; align:center;">Users</b>
+                                            </li>
+                                            <li class="pb-3">
+                                                <a href="userman.php">Manage Users</a>
+                                            </li>
+                                        <?php } if (filter_var($user_perms['roles'],FILTER_VALIDATE_BOOLEAN)) { ?>
+                                            <li>
+                                                <b style="color:white; align:center;">Role Management</b>
+                                            </li>
+                                            <li>
+                                                <a href="roleman.php">Roles</a>
+                                            </li>
+                                        <?php } ?>
+                                    </ul>
+                                </li>
+                            <?php } if (filter_var($user_perms['settings'],FILTER_VALIDATE_BOOLEAN)) { ?>
+                                <a href="settings.php" class="list-group-item list-group-item-action py-2 ripple">
+                                    <i class="fas fa-gears fa-fw me-3"></i>
+                                    <span>Settings</span>
+                                </a>  
+                            <?php } ?>                             
                         </ul>
                     </nav>
                 </div>               

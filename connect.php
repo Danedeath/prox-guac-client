@@ -3,25 +3,20 @@
 include './header.php';
 
 if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) { 
-    header("location: ./login/login.php");
+    header("location: ./login/login.php?next=servers");
     exit;
 }
 
-$data = array(); 
+include $root."/extra/connfuncs.php";
 
-if (isset($_POST['data'])) {
-    
-    $temp = $requestHanlder->unprotect(filter_var($_POST['data'], FILTER_SANITIZE_STRING));
-
-    $data = array(
-        'state'  => $temp[0],
-        'action' => $temp[1],
-        'title'  => $temp[2],
-        'server' => $INFO['guacd_host'],
-        'port'   => $INFO['guacd_port'],
-        'token'  => $temp[3]
-    );
+$VM = null;
+foreach ($owned_vms as $pvm) { 
+    if ($pvm['vmid'] == $data['vmid']) { 
+        $VM = $pvm;
+        break;
+    }
 }
+
 if (empty($data) || $data['state'] != $_SESSION['state']) { 
     $errorMSG = "An error has occurred building the token! Please try again.";
     $returnPage = "servers.php";
@@ -95,13 +90,17 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
         }
 
         .dropdown-menu-end[data-bs-popper] {
-            right: -2.1em !important;
+            right: -2.7em !important;
             left: auto;
         }
 
         .dropdown-menu-start[data-bs-popper] {
             left: -.75em !important;
             right: auto;
+        }
+
+        .dropdown-menu { 
+            border-radius: 0px 0px 3px 3px !important;
         }
     </style>
 
@@ -110,13 +109,13 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
             <nav class="navbar-sidemenu navbar navbar-expand-lg bg-light nav-fill">
                 <div class="container-fluid">
                     <div class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <div class="nav-item dropdown" style="width:80%;max-width:80%;">
+                        <div class="nav-item dropdown" style="width:75%;max-width:75%;">
                             <span class="nav-link dropdown-toggle-menu btn-group-justified fs-5 fw-bold" id="vmDropMenu" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <?php echo $data['title'].'-'.$_SESSION['username']; ?>
                             </span>
                             <div class="dropdown-menu dropdown-menu-start" aria-labelledby="vmDropMenu" style="margin: 0; padding: 0;">
-                                <?php foreach($owned_vms as $vm) { ?>
-                                    <a class="dropdown-item" href="#" onclick="document.getElementById('<?php echo $vm['vmid'];?>-conn').submit();" ><?php echo $vm['name']; ?></a>
+                                <?php foreach($owned_vms as $pvm) { ?>
+                                    <a class="dropdown-item" onclick="document.getElementById('<?php echo $pvm['vmid'];?>-conn').submit();" ><?php echo $pvm['name']; ?></a>
                                 <?php } ?>
                             </div>
                         </div>
@@ -132,9 +131,9 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
                             </div>
                         </div>
                     </div>
-                    <?php foreach($owned_vms as $vm) { ?>
-                        <form id="<?php echo $vm['vmid'];?>-conn" action="connect.php" method="POST">
-                            <input type="hidden" name="data" value="<?php echo $requestHanlder->protect($vm['token']); ?>">
+                    <?php foreach($owned_vms as $pvm) { ?>
+                        <form id="<?php echo $pvm['vmid'];?>-conn" action="connect.php" method="POST" formtarget="_blank">
+                            <input type="hidden" name="data" value="<?php echo $requestHandler->protect($pvm['token']); ?>">
                             <input id="connection_width" type="hidden" name="width" value="1024">
                             <input id="connection_height" type="hidden" name="height" value="720">
                         </form>
@@ -149,13 +148,42 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
                         <textarea id="clipboard" class="form-control" rows="5" style="width: 100% !important"></textarea>
                     </div>
                     <div class="p-1">
-                        <h3>Devices</h3>
+                        <h3>Actions</h3>
+                        <?php if ($VM['status'] == 'running') { ?>
+                            <a class="btn btn-danger" href="connect.php?data=<?php echo $requestHandler->protect(array('quickact', 'stop', $VM['vmid'], $requestHandler->protect($VM['token']))); ?>">Stop</a>
+                            <a class="btn btn-warning" href="connect.php?data=<?php echo $requestHandler->protect(array('quickact', 'restart', $VM['vmid'], $requestHandler->protect($VM['token']))); ?>">Restart</a>
+                        <?php } else if ($VM['status'] == 'paused'){ ?>
+                            <a class="btn btn-success" href="connect.php?data=<?php echo $requestHandler->protect(array('quickact', 'resume', $VM['vmid'], $requestHandler->protect($VM['token']))); ?>">Resume</a>
+                        <?php } else { ?>
+                            <a class="btn btn-success" href="connect.php?data=<?php echo $requestHandler->protect(array('quickact', 'start', $VM['vmid'], $requestHandler->protect($VM['token']))); ?>">Start</a>
+                        <?php } ?>
+                        <a class="btn btn-primary" href="#" onclick="document.getElementById('<?php echo $VM['vmid'];?>-conn').submit();">Reconnect</a>
+                    </div>
+                    <div class="p-1">
+                        <h3> Snapshots </h3>
+                        <form id="snapshotcreate" action="<?php echo $_SERVER['PHP_SELF']; ?>" method="POST">
+                            <input type="hidden" name="data" value="<?php echo $requestHandler->protect(array('snapman', $_SESSION['username'], $VM['vmid'])); ?>"> 
+                            <input type="hidden" name="action" value="create">
+                            <input type="hidden" name="snapname" value="quicksnap<?php echo time(); ?>">
+                            <input type="hidden" name="description" value="">
+                            <input type="hidden" name="vmid" value="<?php echo $VM['vmid']; ?>">
+                            <input type="hidden" name="return_data" value="<?php echo $requestHandler->protect($VM['token']); ?>">
+                        </form>
+                        <a href="#" onclick="document.getElementById('snapshotcreate').submit();"  class="btn btn-primary">Quick Snapshot</a>
+                        <a href="connect.php?data=<?php echo $requestHandler->protect(array('quickact', 'revert', $VM['vmid'], $requestHandler->protect($VM['token']))); ?>" class="btn btn-primary">Quick Revert</a>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="startcapture" id="display"></div>  
+        <div class="startcapture" id="display">
+            <?php if (isset($data['alert'])) { ?>
+                <div class="alert alert-<?php echo $data['alert']['color']; ?> alert-dismissible fade show" role="alert">
+                    <strong><?php echo $data['alert']['title']; ?></strong> <?php echo $data['alert']['msg']; ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            <?php } ?>
+        </div>  
 
         <script type="text/javascript">
             var menuCanvas = document.getElementById("sidebarMenu");
@@ -163,6 +191,7 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
             var clipboard = new ClipboardJS('#clipboard');
             var ignoreGuacInput = false;
             var fileSystem;
+            var errorRecv = null;
 
             function getWidth() {
                 return Math.max(
@@ -185,12 +214,14 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
             }
 
             function saveAs(blob_data, download_file_name) {
+                console.log('starting download of "' + download_file_name +'"');
                 var a = document.createElement('a');
                 var url = window.URL.createObjectURL(blob_data);
                 var filename = download_file_name;
                 a.href = url;
                 a.download = filename;
                 a.click();
+                console.log('download request sent for "' + download_file_name +'"');
                 window.URL.revokeObjectURL(url);
             }
 
@@ -210,7 +241,11 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
 
             // Error handler
             guac.onerror = function(error) {
-                console.log(error);
+
+                if (error.code == 769 && error.message.includes('credentials?')) {
+                    errorRecv = "<strong>" + error.message + "</strong>";
+                } 
+                console.log(error.message);
             };
             
             var conn_string = 'token=<?php echo $data['token']; ?>&width=' + getWidth() + '&height=' + getHeight() + '&dpi=94';
@@ -219,6 +254,7 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
 
             // Disconnect on close
             window.onunload = function() {
+                console.log('disconnecting guac session!');
                 guac.disconnect();
             }
 
@@ -397,9 +433,12 @@ if (empty($data) || $data['state'] != $_SESSION['state']) {
             function reconnect(title){
                 if (! title) {title='Connection Terminated!'}
                 document.body.style.cursor = 'pointer';
+                if (errorRecv == null) {
+                    errorRecv = "Someone has either logged on, or the connection has been terminated. Would you like to reconnect?";
+                }
                 swal({
                     title: title,
-                    text: "Someone has either logged on, or the connection has been terminated. Would you like to reconnect?",
+                    html: errorRecv,
                     type: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#3085d6',

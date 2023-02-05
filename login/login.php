@@ -9,7 +9,15 @@ use Duo\DuoUniversal\DuoException;
 
 // Check if the user is already logged in, if yes then redirect him to servers
 if(isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true){
-    header("location: ../servers.php");
+    if(isset($_SESSION["admin_loggedin"]) && $_SESSION["admin_loggedin"] === true) {
+		if (!isset($_SESSION['redirect_url'])) {
+			header("location: $serverBase/index.php");
+		} else {
+			header("location: $serverBase/{$_SESSION['redirect_url']}");
+		}
+	
+		exit;
+	}
     exit;
 }
 
@@ -24,29 +32,32 @@ $msg = "";
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
-	if (isset($_POST["name"]) && isset($_POST["password"])) {
+	if (isset($_POST["username"]) && isset($_POST["password"])) {
 
+		$username = filter_var($_POST["username"], FILTER_SANITIZE_STRING);
+		$password = $_POST["password"];
+	
+		// check if the user exists first, otherwise we cannot continue the login process!
+		$user = $dbLogin->getUser($username);
 
+		if (empty($user)) {
+			$msg = "Invalid username or password";
+			$_SESSION = array();
+			session_destroy();
+			session_start();
 
-		$username = filter_var($_POST["name"], FILTER_SANITIZE_STRING);
-		$password = filter_var($_POST["password"], FILTER_SANITIZE_STRING);
+		}  else { 
 
-		$salt = $loginHanlder->getUserSalt($username);
-			
-		if (!empty($salt)) {
-					
-			if ($password === FALSE) { //Error al codificar la cadena
+			if ($password === False) { // if the password is empty, we cannot continue the login process!
 				include ('error.php');
 				die();
-			}
+			} else { 
 
-			if ($username == '' || $password == '') {
-				$msg = "You must enter all fields";
+				// compare the password provided!
+				$login_status = $dbLogin->login($username, $password);
 
-			} else {
-				
-				if ($loginHanlder->login($username, $password)) { 
-					
+				if (!is_array($login_status) && $login_status) { 
+
 					try {
 						$duo_client->healthCheck();
 					} catch (DuoException $e) {
@@ -56,20 +67,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 					}
 
 					// generate duo auth request
-					$_SESSION['duo_state'] = $duo_client->generateState();
-					$_SESSION['username']  = $username;
-					$_SESSION['loggedin']  = false;
+					$_SESSION['duo_state']      = $duo_client->generateState();
+					$_SESSION['username']       = $user['username'];
+					$_SESSION['loggedin']       = false;
+                    $_SESSION['admin_loggedin'] = false;
+					$_SESSION['redirect_url']   = isset($_SESSION['redirect_url']) ? filter_var($_POST['redirect_url'], FILTER_SANITIZE_STRING) : 'index';
+					$_SESSION['ip_addr']        = $_SERVER['REMOTE_ADDR'];
 
-					$prompt_uri = $duo_client->createAuthUrl($username, $_SESSION['duo_state']);
+					$prompt_uri = $duo_client->createAuthUrl($user['username'], $_SESSION['duo_state']);
 					header("Location: $prompt_uri");			
-			
-					# header('Location: ../servers.php'); //Envia a la siguiente web
+
+				} else if (isset($login_status['status'])) { 
+					$msg = $login_status['message'];
+				} else { 
+					$msg = "Something went wrong!";
 				}
-				$msg = "Invalid username or password";
-			}
-		} else { 
-			$msg = "Invalid username or password";
-		}
+			} 
+		} 	
 	}
 }
 
@@ -119,9 +133,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 			session_start();
 			$_SESSION['username'] = $username;
 			$_SESSION['loggedin'] = true;
-			$_SESSION['state']    = substr($saved_state, 0, 10); 
+			$_SESSION['state']    		= bin2hex(random_bytes(32));
+			$_SESSION['redirect_url'] 	= (isset($_SESSION['redirect_url'])) ? $_SESSION['redirect_url'] : 'servers';
+			$_SESSION['ip_addr']        = $_SERVER['REMOTE_ADDR'];
 
-			header("Location: $serverBase/servers.php"); // logged in successfully, send to main page
+			header("Location: $serverBase/".$_SESSION['redirect_url'].'.php'); // logged in successfully, send to main page
 			exit();
 
 		} else { 
@@ -166,8 +182,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-u1OknCvxWvY5kfmNBILK2hRnQC3Pr17a+RTT6rIHI7NnikvbZlHgTPOOmMi466C8" crossorigin="anonymous"></script>
 	</head>
 	<body class="text-center bg-dark">
-		<div>
+		<div style="max-width: 300px;width: 25%;">
 			<form class="form-signin mx-auto" name="frmlogin" id="frmlogin" action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" >
+				<input type="hidden" name="redirect_url" value="<?php echo isset($_GET['next']) ? $_GET['next'] : $serverBase.'/index.php' ; ?>">
 				<h1 class="h3 mb-3 font-weight-normal">Login</h1>
 				<?php if (!empty($msg)) { ?>
 					<div class='alert alert-danger alert-dismissible fade show' role='alert'>
@@ -176,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 					</div>
 				<?php } ?>
 				<label for="name" class="sr-only">Username</label>
-				<input type="username" name="name" id="name" class="form-control" placeholder="Username" required autofocus>
+				<input type="username" name="username" id="username" class="form-control" placeholder="Username" required autofocus>
 				<label for="password" class="sr-only">Password</label>
 				<input type="password" id="password" name="password" class="form-control" placeholder="Password" required>
 				<div class="checkbox mb-3">
@@ -187,9 +204,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 			</form>
 			<div class="text-center bg-dark">
 				<input class="btn btn-lg btn-primary btn-block" type="submit" form="frmlogin" value="Sign in">
-				<?php if ($loginHandler->registrationStatus()) { ?>
-					<a href="<?php echo $serverBase; ?>/login_form/register.php" class="btn btn-lg btn-primary btn-block">Register</a>
-				<?php } ?>
 			</div>
 		</div>
 	</body>

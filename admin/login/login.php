@@ -9,7 +9,12 @@ use Duo\DuoUniversal\DuoException;
 
 // Check if the user is already logged in, if yes then redirect them to admin/index.php
 if(isset($_SESSION["admin_loggedin"]) && $_SESSION["admin_loggedin"] === true) {
-    header("location: $serverBase/admin/index.php");
+	if (!isset($_SESSION['redirect_url'])) {
+    	header("location: $serverBase/admin/index.php");
+	} else {
+		header("location: $serverBase/admin/{$_SESSION['redirect_url']}");
+	}
+
     exit;
 }
 
@@ -24,29 +29,36 @@ $msg = "";
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
-	if (isset($_POST["name"]) && isset($_POST["password"])) {
+	if (isset($_POST["username"]) && isset($_POST["password"])) {
 
-		$username = filter_var($_POST["name"], FILTER_SANITIZE_STRING);
-		$password = filter_var($_POST["password"], FILTER_SANITIZE_STRING);
+		$username = filter_var($_POST["username"], FILTER_SANITIZE_STRING);
+		$password = $_POST["password"];
+	
+		// check if the user exists first, otherwise we cannot continue the login process!
+		$user = $dbLogin->getUser($username);
 
-		$salt = $loginHanlder->getUserSalt($username);
-			
-		if (!empty($salt)) {
-					
-			if ($password === FALSE) { //Error al codificar la cadena
+		if (empty($user)) {
+			$msg = "Invalid username or password";
+			$_SESSION = array();
+			session_destroy();
+			session_start();
+
+		}  else if (!$permHandler->checkPerm($user['id'], 'admin')) {
+			$errorMSG = "You do not have permission to access this page!";
+			include 'extra/error.php';
+			die();
+		} else { 
+
+			if ($password === False) { // if the password is empty, we cannot continue the login process!
 				include ('error.php');
 				die();
-			}
+			} else { 
 
-			if ($username == '' || $password == '') {
-				$msg = "You must enter all fields";
+				// compare the password provided!
+				$login_status = $dbLogin->login($username, $password);
 
-			} else {
+				if (!is_array($login_status) && $login_status) { 
 
-				$login_status = $loginHanlder->login($username, $password);
-				
-				if ($login_status) { 
-					
 					try {
 						$duo_client->healthCheck();
 					} catch (DuoException $e) {
@@ -56,22 +68,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 					}
 
 					// generate duo auth request
-					$_SESSION['duo_state'] = $duo_client->generateState();
-					$_SESSION['username']  = $username;
-					$_SESSION['loggedin']  = false;
+					$_SESSION['duo_state']      = $duo_client->generateState();
+					$_SESSION['username']       = $user['username'];
+					$_SESSION['loggedin']       = false;
                     $_SESSION['admin_loggedin'] = false;
+					$_SESSION['redirect_url']   = isset($_SESSION['redirect_url']) ? filter_var($_POST['redirect_url'], FILTER_SANITIZE_STRING) : 'index';
+					$_SESSION['ip_addr']        = $_SERVER['REMOTE_ADDR'];
 
-
-					$prompt_uri = $duo_client->createAuthUrl($username, $_SESSION['duo_state']);
+					$prompt_uri = $duo_client->createAuthUrl($user['username'], $_SESSION['duo_state']);
 					header("Location: $prompt_uri");			
-			
-					# header('Location: ../servers.php'); //Envia a la siguiente web
+
+				} else if (isset($login_status['status'])) { 
+					$msg = $login_status['message'];
+				} else { 
+					$msg = "Something went wrong!";
 				}
-				$msg = "Invalid username or password";
-			}
-		} else { 
-			$msg = "Invalid username or password";
-		}
+			} 
+		} 	
 	}
 }
 
@@ -89,10 +102,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 		$duo_state 		= $_GET['state'];
 		$username  		= $_SESSION['username'];
 		$saved_state 	= $_SESSION['duo_state'];
-		unset($_SESSION);
+		unset($_SESSION['duo_state']);
 		
 		if (empty($saved_state) || empty($username)) { 
-			$msg = "No saved state, please login again";
+			$msg = "Naughty naughty, howd you get here?";
 			$_SESSION = array();
 			session_destroy();
 			session_start();
@@ -116,15 +129,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 				die();
 			}
 
-			$_SESSION = array();
-			session_destroy();
-			session_start();
-			$_SESSION['username'] = $username;
-			$_SESSION['loggedin'] = true;
+			$_SESSION['username'] 		= $username;
+			$_SESSION['loggedin'] 		= true;
 			$_SESSION['admin_loggedin'] = true;
-			$_SESSION['state']    = substr($saved_state, 0, 10); 
+			$_SESSION['state']    		= bin2hex(random_bytes(32));
+			$_SESSION['redirect_url'] 	= (isset($_SESSION['redirect_url'])) ? $_SESSION['redirect_url'] : 'index';
+			$_SESSION['ip_addr']        = $_SERVER['REMOTE_ADDR'];
 
-			header("Location: $serverBase/admin/index.php"); // logged in successfully, send to main page
+			header("Location: $serverBase/admin/".$_SESSION['redirect_url'].'.php'); // logged in successfully, send to main page
 			exit();
 
 		} else { 
@@ -141,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 <html xmlns="http://www.w3.org/1999/xhtml">
 	<head>
 		<meta http-equiv="Content-Type" content="text/html" />
-		<title>Admin Login</title>
+		<title>Login</title>
 		<meta name="description" content="Login page"/>
 		<meta name="keywords" content="login"/>
 		<meta charset="UTF-8">
@@ -170,6 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 	<body class="text-center bg-dark">
 		<form class="form-signin mx-auto" name="frmregister" action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" >
 			<h1 class="h3 mb-3 font-weight-normal">Admin Login</h1>
+			<input type="hidden" name="redirect_url" value="<?php echo isset($_GET['next']) ? $_GET['next'] : $serverBase.'/admin/index.php' ; ?>">
 			<?php if (!empty($msg)) { ?>
 				<div class='alert alert-danger alert-dismissible fade show' role='alert'>
 					<?php echo $msg; ?>
@@ -177,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 				</div>
 			<?php } ?>
 			<label for="name" class="sr-only">Username</label>
-			<input type="username" name="name" id="name" class="form-control" placeholder="Username" required autofocus>
+			<input type="username" name="username" id="username" class="form-control" placeholder="Username" required autofocus>
 			<label for="password" class="sr-only">Password</label>
 			<input type="password" id="password" name="password" class="form-control" placeholder="Password" required>
 			<div class="checkbox mb-3">
@@ -189,4 +202,3 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET') {
 		</form>
 	</body>
 </html>
-

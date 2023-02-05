@@ -2,14 +2,20 @@
 
 include './header.php';
 
-if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) { 
-    header("location: ./login/login.php");
+if(!isset($_SESSION["admin_loggedin"]) || $_SESSION["admin_loggedin"] !== true) { 
+    header("location: ./login/login.php?next=connections");
     exit;
 }
 
 if (empty($running_nodes)) {
     $errorMSG = "No running nodes were discovered!";
     include $root."/extra/error.php";
+    die();
+}
+
+if (!filter_var($user_perms['connections'],FILTER_VALIDATE_BOOLEAN)) {
+    $errorMSG = "You do not have permission to access this page!";
+    include 'extra/error.php';
     die();
 }
 
@@ -35,16 +41,16 @@ if (isset($_POST['data']) && $_POST['data'] != '') { // data being sent with a p
         if ($action == 'create') { 
 
             $conn_data = array(
-                'name' => $_POST['name'],
-                'host' => $_POST['host'],
-                'port' => $_POST['port'],
-                'username' => $_POST['username'],
-                'password' => $_POST['password'],
-                'protocol' => $_POST['protocol'],
-                'os' => $_POST['os'], 
-                'node' => $_POST['node'],
-                'drive' => $_POST['drive'],
-                'owner' => $_POST['owner'],
+                'name'      => $_POST['name'],
+                'host'      => $_POST['host'],
+                'port'      => $_POST['port'],
+                'username'  => $_POST['username'],
+                'password'  => $_POST['password'],
+                'protocol'  => $_POST['protocol'],
+                'os'        => $_POST['os'], 
+                'node'      => $_POST['node'],
+                'drive'     => $_POST['drive'],
+                'owner'     => $_POST['owner'],
             );
 
             // $connManager->validateConn($conn_data); // validate the connection data (checks for empty fields
@@ -53,13 +59,28 @@ if (isset($_POST['data']) && $_POST['data'] != '') { // data being sent with a p
 
         } else if ($action == 'update') { 
             
-            $conn_data = 
-
-            $alert_msg = $connManager->updateConnection(json_decode($conn_data), true);
+            $conn_data = array(
+                'id'        => $data[3],
+                'name'      => $_POST['name'],
+                'host'      => $_POST['host'],
+                'port'      => $_POST['port'],
+                'username'  => $_POST['username'],
+                'password'  => $_POST['password'],
+                'protocol'  => $_POST['protocol'],
+                'os'        => $_POST['os'], 
+                'node'      => $_POST['node'],
+                'drive'     => $_POST['drive'],
+                'owner'     => $_POST['owner'],
+            );
+            
+            $alert_msg = $connManager->updateConnection($conn_data);
 
         } else if ($action == 'delete') { 
 
-            $alert_msg = $connManager->deleteConnection(data[3], true);
+            $conn_data = $connManager->getConnection($data[3]);
+            $alert_msg = $connManager->deleteConnection($conn_data);
+
+
         } else { 
             $errorMSG = "An invalid action was requested, how'd you do that?";
             include 'extra/error.php';
@@ -95,7 +116,7 @@ if (isset($_POST['data']) && $_POST['data'] != '') { // data being sent with a p
             </ol>
         </section>
         <div class="row pt-5 pe-5">
-            <?php include "./extra/conn_page.php"; ?>
+            <?php include "./diag/conn_page.php"; ?>
         </div>
     </div>
 </div>

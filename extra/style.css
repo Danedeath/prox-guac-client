@@ -85,3 +85,142 @@ body {
   left: 0;
   top: 0;
 }
+
+/* ==================== Servers Page End ==================== */
+
+/* ==================== Profile Page Start ==================== */
+
+/* Start Widgets!!! */
+
+.modal {
+  background: rgba(0, 0, 0, 0.3)
+  }
+    
+  .modal-primary .modal-header,
+  .modal-primary .modal-footer {
+      border-color: #307095
+  }
+    
+  .modal-warning .modal-header,
+  .modal-warning .modal-footer {
+      border-color: #c87f0a
+  }
+    
+  .modal-info .modal-header,
+  .modal-info .modal-footer {
+      border-color: #0097bc
+  }
+    
+  .modal-success .modal-header,
+  .modal-success .modal-footer {
+      border-color: #00733e
+  }
+    
+  .modal-danger .modal-header,
+  .modal-danger .modal-footer {
+      border-color: #c23321
+  }
+    
+  .box-widget {
+      border: none;
+      position: relative
+  }
+  
+  .vm-box-list {
+      padding-left: 0px !important;
+      padding-right: 0px !important;
+  }
+    
+  .widget-user .widget-user-header {
+      padding: 20px;
+      height: 120px;
+      border-top-right-radius: 3px;
+      border-top-left-radius: 3px
+  }
+    
+  .widget-user .widget-user-username {
+      margin-top: 0;
+      margin-bottom: 5px;
+      font-size: 25px;
+      font-weight: 300;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2)
+  }
+    
+  .widget-user .widget-user-desc {
+      margin-top: 0;
+      padding-left:35px;
+      line-height: 1.3;
+      font-weight: 300;
+      font-size: 18px;
+  }
+    
+  .widget-user .widget-user-image {
+      position: absolute;
+      top: 65px;
+      left: 50%;
+      margin-left: -45px;
+      padding: 20px;
+  }
+    
+  .widget-user .widget-user-image>img {
+      width: 90px;
+      height: auto;
+      border: 3px solid #fff
+  }
+    
+  .widget-user .box-footer {
+      padding-top: 30px
+  }
+    
+  .widget-user-2 .widget-user-header {
+      padding: 20px;
+      border-top-right-radius: 3px;
+      border-top-left-radius: 3px
+  }
+    
+  .widget-user-2 .widget-user-header .widget-user-username {
+      margin-top: 5px;
+      margin-bottom: 5px;
+      margin-left: 85px;
+      font-size: 25px;
+      font-weight: 300;
+      padding-left: 45px;
+  }
+    
+  .widget-user-2 .widget-user-header .widget-user-desc {
+      margin-top: 0;
+      padding-left:45px;
+      font-size: 14px;
+      margin-left: 85px;
+  
+  }
+    
+  .widget-user-2 .widget-user-username,
+  .widget-user-2 .widget-user-desc {
+      margin-left: 85px;
+      padding-left: 45px;
+  }
+    
+  .widget-user-2 .widget-user-header .widget-user-image >img {
+      width: 100px;
+      height: auto;
+      float: left;
+      margin-top: 20px;
+  }
+  
+  .widget-user-2 .widget-user-header > button { 
+      float: right !important;
+      margin-top: 10px;
+      margin-right: 10px;
+  }
+  
+  ul > li > a > i ,
+  ul > li > a > span,
+  ul > li > a :hover,
+  ul > li > a {
+      color: #ddd !important;
+      text-decoration: none;
+  }
+  
+  /* End Widgets!!! */
+  

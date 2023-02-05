@@ -3,13 +3,19 @@
 include './header.php';
 
 if(!isset($_SESSION["admin_loggedin"]) || $_SESSION["admin_loggedin"] !== true) { 
-    header("location: ./login/login.php");
+    header("location: ./login/login.php?next=userman");
     exit;
 }
 
 if (empty($running_nodes)) {
     $errorMSG = "No running nodes were discovered!";
-    include $root."/extra/error.php";
+    include 'extra/error.php';
+    die();
+}
+
+if (!filter_var($user_perms['userman'],FILTER_VALIDATE_BOOLEAN)) {
+    $errorMSG = "You do not have permission to access this page!";
+    include 'extra/error.php';
     die();
 }
 
@@ -66,7 +72,7 @@ if (isset($_POST['data']) && $_POST['data'] != '') { // data being sent with a p
             $username = filter_var($_POST['username'], FILTER_SANITIZE_STRING);
             $email    = filter_var($_POST['email'],    FILTER_SANITIZE_EMAIL);
                         
-            $old_user = explode(":!:!", $data[4]);
+            $old_user = explode(":!:!", end($data));
             $old_user = $userHandler->getUserbyID($old_user[0]);
 
             // check if user exists, otherwise we cannot edit the requested user!
@@ -79,22 +85,22 @@ if (isset($_POST['data']) && $_POST['data'] != '') { // data being sent with a p
                 exit();
             }
 
-            if ($email != $user['email'] || $username != $user['username']) { 
+            if ($email != $old_user['email'] || $username != $old_user['username']) { 
 
-                if ($dbLogin->getUser($user['email'])) { 
-                    $errorMSG = "Email address $email is already in use, unable to update user ".$user['username']."!";
+                if ($dbLogin->getUser($old_user['email'])) { 
+                    $errorMSG = "Email address $email is already in use, unable to update user ".$old_user['username']."!";
                     include 'extra/error.php';
                     exit();
                     
-                } else if ($userHandler->getUserByName($username)) { 
-                    $errorMSG = "Username $username is already in use, unable to update user ".$user['username']."!";
+                } else if (strcmp($_SESSION['username'], $username) != 0 && $userHandler->getUserByName($username)) { 
+                    $errorMSG = "Username $username is already in use, unable to update user ".$old_user['username']."!";
                     include 'extra/error.php';
                     exit();
                 }
 
                 // provided email and username are not being used by another user, lets update the user now...
                 $new_userData = array(
-                    'id'       => $user['id'],
+                    'id'       => $old_user['id'],
                     'username' => $username,
                     'email'    => $email,
 
@@ -105,22 +111,29 @@ if (isset($_POST['data']) && $_POST['data'] != '') { // data being sent with a p
                 if (array_key_exists('status', $update_result) && $update_result['status'] == 'success') { 
                     $alert_msg = array(
                         'status' => 'success',
-                        'message'  => 'Successfully updated the user '.$user['username'].'! Please note that the user will need to re-login to the system to see the changes.'
+                        'message'  => 'Successfully updated the user <strong>'.$username.'</strong>!<br>Please note that the user will need to re-login to the system to see the changes.'
                     );
                 } else {
-                    $errorMSG = "An error has occurred while updating the user ".$user['username']."!";
+                    $errorMSG = "An error has occurred while updating the user ".$old_user['username']."!";
                     include 'extra/error.php';
                     exit();
                 }
 
             }
 
+            $password = $_POST['password']; 
+            $password_conf = $_POST['password_conf'];
+
+            if (strcmp($password, $password_conf) == 0 && strcmp($password, $old_user['password']) != 0)  {// passwords match, go ahead and update to a new one!
+
+                $userHandler->updatePassword($old_user['id'], $password);
+            }
         }
 
         else if ($action == 'suspend') { // suspend the login ability of the requested user! 
 
             // make sure the account making the request isnt being suspended!
-            if ($user['id'] == $_SESSION['user_id']) { 
+            if ($old_user['id'] == $_SESSION['user_id']) { 
                 $alert_msg = array(
                     'status' => 'error',
                     'message'  => 'You cannot suspend your own account!'
@@ -138,15 +151,59 @@ if (isset($_POST['data']) && $_POST['data'] != '') { // data being sent with a p
                 $userHandler->suspendUser($user);
             }
         }
+
+        else if ($action == 'editperms') { // update the permissions for the requested user!
+            $user = $userHandler->getUserByID($user);
+            
+            if (!$user) { 
+                $alert_msg = array(
+                    'status' => 'error',
+                    'message'  => 'The requested user does not exist!'
+                );
+            } else { 
+                $old_perms = $userHandler->getUserPerms($user['id']);
+                $new_perms = array();
+
+                foreach($old_perms as $key => $value) { 
+                    if ($key != 'id' && $key != 'user_id') { 
+                        if (isset($_POST['perm_' . $key])) { 
+                            $new_perms[$key] = '1';
+                        } else { 
+                            $new_perms[$key] = '0';
+                        }
+                    }
+                }
+
+                $alert_msg = $userHandler->updatePerms(
+                    $user['id'], $new_perms
+                );     
+            }
+        } 
+
+        else if ($action == 'unlock') { // unlock the requested user, will reset the amount of login attempts to 0!
+            if (!$user) { 
+                $alert_msg = array(
+                    'status' => 'error',
+                    'message'  => 'The requested user does not exist!'
+                );
+            } else { 
+                $userHandler->unlockUser($user);
+
+                $user_info = $userHandler->getUserByID($user);
+                $alert_msg = array(
+                    'status' => 'success',
+                    'message'  => 'The user <strong>'.$user_info['username'].'</strong> has been unlocked!'
+                );
+            }
+        }
     }
-    
-    
 }
 
-?>    <div class="row position-absolute main-body text-light">
+?>    
+    <div class="row position-absolute main-body text-light">
 
-<?php
-include "./extra/user_page.php";
-?>
-</div>
+        <?php
+        include "./diag/user_page.php";
+        ?>
+    </div>
 </div>
